@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 70" fill="none" width="100%" height="100%">
+  <defs>
+    <!-- White Metallic Chrome / Platinum Gradient for the Infinity Ribbon -->
+    <linearGradient id="metal-sheen-1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="22%" stop-color="#D8E0E8" />
+      <stop offset="45%" stop-color="#FFFFFF" />
+      <stop offset="68%" stop-color="#8F9CA8" />
+      <stop offset="85%" stop-color="#E2E8F0" />
+      <stop offset="100%" stop-color="#FFFFFF" />
+    </linearGradient>
+
+    <linearGradient id="metal-sheen-2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="30%" stop-color="#94A3B8" />
+      <stop offset="50%" stop-color="#F8FAFC" />
+      <stop offset="75%" stop-color="#64748B" />
+      <stop offset="100%" stop-color="#FFFFFF" />
+    </linearGradient>
+
+    <!-- White Metallic Typography Gradient with Specular Light Angle -->
+    <linearGradient id="metal-text" x1="10%" y1="0%" x2="90%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="25%" stop-color="#F1F5F9" />
+      <stop offset="42%" stop-color="#CBD5E1" />
+      <stop offset="55%" stop-color="#FFFFFF" />
+      <stop offset="75%" stop-color="#94A3B8" />
+      <stop offset="90%" stop-color="#E2E8F0" />
+      <stop offset="100%" stop-color="#FFFFFF" />
+    </linearGradient>
+
+    <!-- Subtle Metallic Subtitle Gradient -->
+    <linearGradient id="metal-sub" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#94A3B8" />
+      <stop offset="50%" stop-color="#E2E8F0" />
+      <stop offset="100%" stop-color="#94A3B8" />
+    </linearGradient>
+
+    <!-- Ambient Metallic Glow Filter -->
+    <filter id="metallic-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <!-- Specular Drop Shadow -->
+    <filter id="subtle-shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.6" />
+    </filter>
+  </defs>
+
+  <!-- Group with Shadow Filter -->
+  <g filter="url(#subtle-shadow)">
+    <!-- Sleek Apple-inspired Continuous Stream / Infinity Loop Glyph -->
+    <g transform="translate(8, 7)" filter="url(#metallic-glow)">
+      <!-- Left Loop -->
+      <path
+        d="M28 35 C18 35 10 28 10 19 C10 10 18 3 28 3 C38 3 44 14 50 20 C56 26 62 35 72 35 C82 35 90 27 90 19 C90 11 82 3 72 3 C62 3 56 12 50 18 C44 24 38 35 28 35 Z"
+        fill="none"
+        stroke="url(#metal-sheen-1)"
+        stroke-width="5.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <!-- Specular Highlight Overlay Curve -->
+      <path
+        d="M22 13 C24 8 28 5 32 5 C38 5 43 12 49 18"
+        fill="none"
+        stroke="#FFFFFF"
+        stroke-width="2"
+        stroke-linecap="round"
+        opacity="0.85"
+      />
+      <path
+        d="M68 25 C72 31 77 33 82 33 C86 33 88 30 89 25"
+        fill="none"
+        stroke="#FFFFFF"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        opacity="0.75"
+      />
+    </g>
+
+    <!-- Metallic Typography: ENDLESS STREAM -->
+    <text
+      x="116"
+      y="38"
+      font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'Segoe UI', sans-serif"
+      font-size="21"
+      font-weight="800"
+      letter-spacing="0.18em"
+      fill="url(#metal-text)"
+    >
+      ENDLESS
+    </text>
+
+    <text
+      x="116"
+      y="55"
+      font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'Segoe UI', sans-serif"
+      font-size="12"
+      font-weight="600"
+      letter-spacing="0.32em"
+      fill="url(#metal-sub)"
+    >
+      STREAM
+    </text>
+  </g>
+</svg>

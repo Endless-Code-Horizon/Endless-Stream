@@ -1,0 +1,45 @@
+{
+  "name": "streamx",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "oxlint",
+    "electron": "electron electron/main.cjs",
+    "app:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron electron/main.cjs\""
+  },
+  "dependencies": {
+    "@videojs/http-streaming": "^3.17.0",
+    "hls.js": "^1.7.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.6.3",
+    "torrent-stream": "^1.2.1",
+    "video.js": "^8.21.0",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@electron/packager": "^20.3.0",
+    "@tailwindcss/vite": "^4.1.10",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^10.0.7",
+    "electron": "^45.3.2",
+    "oxlint": "^1.90.0",
+    "postcss": "^8.5.4",
+    "tailwindcss": "^4.1.10",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6",
+    "wait-on": "^9.5.1"
+  }
+}
