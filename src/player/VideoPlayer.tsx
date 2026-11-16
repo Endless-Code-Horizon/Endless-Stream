@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import type { StreamSource, MediaType, EpisodeRef } from '@/types'
 import { useUIStore } from '@/app/uiStore'
 import { LoomBoxLoading } from './LoomBoxLoading'
@@ -265,10 +265,15 @@ export function VideoPlayer({
   const subtitleDropdownRef = useRef<HTMLDivElement>(null)
   const userPausedRef = useRef(false)
   const hasStartedRef = useRef(false)
+  const hasUnlockedPlaybackRef = useRef(false)
+  const lastLoadedUrlRef = useRef<string | null>(null)
 
   const [sourceIndex, setSourceIndex] = useState(0)
   const currentSource = sources[sourceIndex] || sources[0]
-  const currentCleanInfo = currentSource ? parseStreamClean(currentSource, title) : null
+  const currentCleanInfo = useMemo(
+    () => (currentSource ? parseStreamClean(currentSource, title) : null),
+    [currentSource?.url, currentSource?.filename, currentSource?.label, title]
+  )
   const isP2P = Boolean(currentSource?.url?.includes('/stream/'))
 
   const defaultDuration =
@@ -461,9 +466,13 @@ export function VideoPlayer({
   const [isPrebuffering, setIsPrebuffering] = useState<boolean>(isP2P)
   const [prebufferProgress, setPrebufferProgress] = useState<number>(0)
 
-  // Reset states when changing source
+  // Reset states ONLY when changing source URL
   useEffect(() => {
-    const isTorrent = Boolean(currentSource?.url?.includes('/stream/'))
+    if (!currentSource?.url || lastLoadedUrlRef.current === currentSource.url) return
+    lastLoadedUrlRef.current = currentSource.url
+
+    const isTorrent = Boolean(currentSource.url.includes('/stream/'))
+    hasUnlockedPlaybackRef.current = false
     setIsPrebuffering(isTorrent)
     setPrebufferProgress(0)
     setPlaybackError(null)
@@ -471,7 +480,7 @@ export function VideoPlayer({
     hasStartedRef.current = false
 
     // Load native ExoPlayer on Android APK
-    if (isExoPlayerSupported() && currentSource?.url) {
+    if (isExoPlayerSupported() && currentSource.url) {
       exoLoad(currentSource.url, (startTimeRef.current || 0) * 1000, true).then(() => {
         setIsPlaying(true)
         setTimeout(() => {
@@ -479,7 +488,7 @@ export function VideoPlayer({
         }, 1200)
       })
     }
-  }, [currentSource?.url, refreshAudioTracks])
+  }, [currentSource?.url])
 
   // Native status polling for ExoPlayer (Android)
   useEffect(() => {
@@ -645,8 +654,10 @@ export function VideoPlayer({
             percent >= 100 ||
             bufferedSeconds >= 1.5 ||
             (video && video.readyState >= 2) ||
-            downloadedBytes >= minRequiredBytes
+            downloadedBytes >= minRequiredBytes ||
+            (video && (video.currentTime || 0) > 0.5)
           ) {
+            hasUnlockedPlaybackRef.current = true
             setIsPrebuffering(false)
             if (!hasStartedRef.current && !userPausedRef.current) {
               hasStartedRef.current = true
@@ -736,6 +747,7 @@ export function VideoPlayer({
       try {
         video.currentTime = clampedTarget
         setCurrentTime(clampedTarget)
+        hasUnlockedPlaybackRef.current = true
         setIsPrebuffering(false)
       } catch (err) {
         console.warn('Seek error:', err)
@@ -1124,10 +1136,12 @@ export function VideoPlayer({
     }
 
     const onCanPlay = () => {
+      hasUnlockedPlaybackRef.current = true
       setIsPrebuffering(false)
     }
 
     const onPlaying = () => {
+      hasUnlockedPlaybackRef.current = true
       setIsPrebuffering(false)
       setIsPlaying(true)
     }
@@ -1148,7 +1162,8 @@ export function VideoPlayer({
       if (!isScrubbingRef.current) {
         setCurrentTime(current)
       }
-      if (vTime > 0) {
+      if (vTime > 0.5) {
+        hasUnlockedPlaybackRef.current = true
         setIsPrebuffering(false)
       }
       if (onTimeUpdateRef.current) {
@@ -1331,7 +1346,7 @@ export function VideoPlayer({
       )}
 
       {/* BitTorrent Pre-Buffering Gate Overlay (Living Creature Loom Box Line Effect) */}
-      {isPrebuffering && !playbackError && (
+      {isPrebuffering && !hasUnlockedPlaybackRef.current && currentTime <= 1 && !playbackError && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center p-4 z-30 animate-in fade-in duration-300">
           <LoomBoxLoading
             title={title || 'Buffering Stream Chunks'}
