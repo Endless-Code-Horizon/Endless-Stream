@@ -72,6 +72,7 @@ export function getOrCreateEngine(infoHash) {
 
   const engine = torrentStream(magnetUri, {
     path: CACHE_DIR,
+    verify: false,
     connections: 120,
     uploads: 10,
   });
@@ -444,18 +445,9 @@ export function p2pMiddleware(req, res, next) {
         } catch {}
 
         const ext = path.extname(fileToStream.name || '').toLowerCase();
-        const fileNameLower = (fileToStream.name || '').toLowerCase();
-        const isHEVC =
-          fileNameLower.includes('hevc') ||
-          fileNameLower.includes('h265') ||
-          fileNameLower.includes('x265') ||
-          fileNameLower.includes('2160p') ||
-          fileNameLower.includes('4k');
-
         const isMkvOrNeedsRemux =
-          ['.mkv', '.avi', '.ts', '.mov', '.vob', '.webm'].includes(ext) ||
-          url.searchParams.get('remux') === '1' ||
-          isHEVC;
+          ['.mkv', '.avi', '.ts', '.mov', '.vob'].includes(ext) ||
+          url.searchParams.get('remux') === '1';
 
         // A. ON-THE-FLY TRANSMUXING & REAL-TIME TRANSCODING
         // Remuxes container to fragmented MP4 and transcodes HEVC to universal H.264 if needed

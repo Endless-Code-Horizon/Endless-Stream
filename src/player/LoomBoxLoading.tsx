@@ -49,14 +49,17 @@ export function LoomBoxLoading({
           {/* Sweeping Horizontal Laser Beam */}
           <div className="absolute inset-y-0 w-16 bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none animate-loom-hscan" />
 
-          {/* Scanner Center: Minimalist Holographic Core (No Sun Icon) */}
+          {/* Scanner Center: Minimalist Holographic Core */}
           <div className="relative z-10 flex flex-col items-center justify-center pointer-events-none">
-            {typeof progress === 'number' ? (
+            {typeof progress === 'number' && progress > 0 ? (
               <span className="text-2xl font-mono font-black text-cyan-300 tracking-wider drop-shadow-[0_0_15px_rgba(56,189,248,0.9)]">
                 {progress}%
               </span>
             ) : (
-              <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_15px_rgba(56,189,248,1)] animate-ping" />
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_18px_rgba(56,189,248,1)] animate-ping" />
+                <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-300/80">Connecting</span>
+              </div>
             )}
           </div>
 

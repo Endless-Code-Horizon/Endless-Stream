@@ -75,6 +75,7 @@ function getOrCreateEngine(infoHash) {
 
     const engine = torrentStream(magnetUri, {
       path: CACHE_DIR,
+      verify: false,
       connections: 100,
       uploads: 10,
     });

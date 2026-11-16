@@ -588,6 +588,17 @@ export function VideoPlayer({
     const infoHash = infoHashMatch[1]
     let active = true
 
+    // Safety fallback: Never keep the prebuffering gate open for longer than 6 seconds
+    const safetyTimeout = setTimeout(() => {
+      if (active) {
+        setIsPrebuffering(false)
+        const video = videoRef.current
+        if (video && video.paused && !userPausedRef.current) {
+          video.play().then(() => setIsPlaying(true)).catch(() => {})
+        }
+      }
+    }, 6000)
+
     const fetchStats = async () => {
       try {
         const res = await fetch(`/stats/${infoHash}`)
@@ -599,18 +610,24 @@ export function VideoPlayer({
           const downloadedBytes = data.downloaded || 0
           const minRequiredBytes = 8 * 1024 * 1024 // 8MB buffer
 
-          const bufferedSeconds =
-            video && video.buffered && video.buffered.length > 0
-              ? video.buffered.end(0) - video.currentTime
-              : 0
+          let bufferedSeconds = 0
+          try {
+            if (video && video.buffered && video.buffered.length > 0) {
+              const lastIdx = video.buffered.length - 1
+              bufferedSeconds = Math.max(0, video.buffered.end(lastIdx) - (video.currentTime || 0))
+            }
+          } catch {}
 
           let percent = 0
           if (!data.ready) {
-            percent = Math.min(25, (data.peers || 0) * 4)
+            const peerCount = typeof data.peers === 'number' && data.peers > 0 ? data.peers : (currentCleanInfo?.seeders || 0)
+            const peerBonus = Math.min(25, peerCount * 4)
+            const downloadBonus = downloadedBytes > 0 ? Math.min(25, Math.round((downloadedBytes / (2 * 1024 * 1024)) * 25)) : 0
+            percent = Math.max(15, peerBonus + downloadBonus)
           } else {
             const bytesPercent = Math.min(100, Math.round((downloadedBytes / minRequiredBytes) * 100))
-            const timePercent = Math.min(100, Math.round((bufferedSeconds / 2.5) * 100))
-            percent = Math.max(30, bytesPercent, timePercent)
+            const timePercent = Math.min(100, Math.round((bufferedSeconds / 2.0) * 100))
+            percent = Math.max(35, bytesPercent, timePercent)
           }
 
           setPrebufferProgress(percent)
@@ -618,9 +635,9 @@ export function VideoPlayer({
           // Finish prebuffering gate once enough data is ready or video is ready to play
           if (
             percent >= 100 ||
-            bufferedSeconds >= 2.5 ||
-            (video && video.readyState >= 3) ||
-            (data.ready && downloadedBytes >= minRequiredBytes)
+            bufferedSeconds >= 1.5 ||
+            (video && video.readyState >= 2) ||
+            downloadedBytes >= minRequiredBytes
           ) {
             setIsPrebuffering(false)
             if (!hasStartedRef.current && !userPausedRef.current) {
@@ -639,6 +656,7 @@ export function VideoPlayer({
 
     return () => {
       active = false
+      clearTimeout(safetyTimeout)
       clearInterval(timer)
     }
   }, [currentSource?.url])
@@ -710,6 +728,7 @@ export function VideoPlayer({
       try {
         video.currentTime = clampedTarget
         setCurrentTime(clampedTarget)
+        setIsPrebuffering(false)
       } catch (err) {
         console.warn('Seek error:', err)
       }

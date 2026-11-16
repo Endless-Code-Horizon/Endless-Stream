@@ -62,6 +62,23 @@ export function PosterCard({ item, skeleton, progress: _progress, onRemove }: Po
           </div>
         )}
 
+        {/* Desktop Content Title / Logo Overlay (Hidden on Mobile, Visible on Desktop) */}
+        {!showFallback && (
+          <div className="hidden sm:flex absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/85 via-black/45 to-transparent pointer-events-none z-20 items-end">
+            {item.logo ? (
+              <img
+                src={item.logo}
+                alt={item.title}
+                className="max-h-7 max-w-[85%] object-contain drop-shadow-md"
+              />
+            ) : (
+              <span className="text-xs font-semibold text-white/95 truncate drop-shadow-md tracking-tight">
+                {item.title}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Remove from Continue Watching Button */}
         {onRemove && (
           <button
