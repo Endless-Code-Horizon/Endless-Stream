@@ -40,6 +40,7 @@ export function PosterCard({ item, skeleton, progress: _progress, onRemove }: Po
               src={mobileImageUrl}
               alt={item.title}
               loading="lazy"
+              decoding="async"
               onError={() => setImgError(true)}
               className="sm:hidden w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
             />
@@ -48,6 +49,7 @@ export function PosterCard({ item, skeleton, progress: _progress, onRemove }: Po
               src={desktopImageUrl}
               alt={item.title}
               loading="lazy"
+              decoding="async"
               onError={() => setImgError(true)}
               className="hidden sm:block w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
             />
@@ -59,22 +61,6 @@ export function PosterCard({ item, skeleton, progress: _progress, onRemove }: Po
             </span>
           </div>
         )}
-
-        {/* Content Title Logo Image if provided (no ugly text clutter) */}
-        {item.logo ? (
-          <div className="absolute inset-x-2.5 bottom-2.5 flex items-center justify-start pointer-events-none z-20">
-            <img
-              src={item.logo}
-              alt=""
-              className="max-h-6 sm:max-h-8 max-w-[80%] object-contain drop-shadow-md"
-            />
-          </div>
-        ) : null}
-
-        {/* Small Endless Stream badge in corner */}
-        <div className="absolute bottom-2.5 right-2.5 z-20 flex items-center gap-1 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] text-white/80 font-medium">
-          <span>∞</span>
-        </div>
 
         {/* Remove from Continue Watching Button */}
         {onRemove && (

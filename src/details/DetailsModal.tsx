@@ -530,33 +530,50 @@ export function DetailsModal() {
                     More Like This
                   </h3>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-3 sm:grid-cols-3 gap-2.5 sm:gap-4">
                     {moreLikeThis.map((item) => (
                       <div
                         key={item.id}
                         onClick={() => openModal(item.type, item.id)}
                         className="bg-[#242424] rounded-xl overflow-hidden border border-white/10 hover:border-white/30 transition-all cursor-pointer group flex flex-col"
                       >
-                        {/* Thumbnail with duration tag */}
-                        <div className="relative aspect-video w-full bg-neutral-900 overflow-hidden">
+                        {/* Portrait 2:3 Poster on mobile, 16:9 Thumbnail on desktop */}
+                        <div className="relative aspect-[2/3] sm:aspect-video w-full bg-neutral-900 overflow-hidden">
+                          {/* Mobile Vertical Poster Artwork */}
                           <img
-                            src={item.thumbnail || item.backdrop || item.poster}
+                            src={item.poster || item.thumbnail || item.backdrop}
                             alt={item.title}
+                            loading="lazy"
+                            decoding="async"
                             onError={(e) => {
                               const target = e.currentTarget
                               if (item.poster && target.src !== item.poster) {
                                 target.src = item.poster
                               }
                             }}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            className="sm:hidden w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                          {/* Desktop Landscape / Thumbnail */}
+                          <img
+                            src={item.thumbnail || item.backdrop || item.poster}
+                            alt={item.title}
+                            loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              const target = e.currentTarget
+                              if (item.poster && target.src !== item.poster) {
+                                target.src = item.poster
+                              }
+                            }}
+                            className="hidden sm:block w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold text-white/80">
                             {item.type === 'series' ? 'TV' : 'HD'}
                           </div>
                         </div>
 
-                        {/* Card Content */}
-                        <div className="p-3.5 flex flex-col flex-1 justify-between">
+                        {/* Card Content (Hidden on mobile for clean poster look, displayed on desktop) */}
+                        <div className="hidden sm:flex p-3.5 flex-col flex-1 justify-between">
                           <div>
                             <div className="flex items-center justify-between mb-1.5">
                               {item.rating ? (
