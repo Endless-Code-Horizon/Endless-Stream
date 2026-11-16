@@ -46,6 +46,8 @@ function getMimeType(filename) {
       return 'video/x-msvideo';
     case '.mov':
       return 'video/quicktime';
+    case '.ts':
+      return 'video/mp2t';
     default:
       return 'video/mp4';
   }
@@ -53,7 +55,40 @@ function getMimeType(filename) {
 
 function isVideoFile(filename) {
   const ext = path.extname(filename || '').toLowerCase();
-  return ['.mp4', '.mkv', '.webm', '.avi', '.m4v', '.mov', '.ts'].includes(ext);
+  return ['.mp4', '.mkv', '.webm', '.avi', '.m4v', '.mov', '.ts', '.vob', '.wmv', '.flv'].includes(ext);
+}
+
+async function waitForHeadChunks(filePath, targetBytes = 1024 * 1024, timeoutMs = 30000, isCancelled = () => false) {
+  const startTime = Date.now();
+  const minRequired = Math.min(targetBytes, 256 * 1024);
+
+  while (Date.now() - startTime < timeoutMs) {
+    if (isCancelled()) {
+      throw new Error('Client disconnected while waiting for media chunks');
+    }
+    if (fs.existsSync(filePath)) {
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.size >= targetBytes) {
+          return true;
+        }
+        if (stat.size >= minRequired && Date.now() - startTime > 2500) {
+          return true;
+        }
+      } catch {}
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+
+  // Final check before timeout
+  if (fs.existsSync(filePath)) {
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.size > 0) return true;
+    } catch {}
+  }
+
+  throw new Error(`Timeout waiting for initial head chunks on disk: ${filePath}`);
 }
 
 export function getOrCreateEngine(infoHash) {
@@ -416,44 +451,102 @@ export function p2pMiddleware(req, res, next) {
       return;
     }
 
+    let clientDisconnected = false;
+    const onDisconnect = () => {
+      clientDisconnected = true;
+    };
+    req.on('close', onDisconnect);
+    res.on('close', onDisconnect);
+
     getOrCreateEngine(infoHash)
-      .then((entry) => {
+      .then(async (entry) => {
+        if (clientDisconnected) return;
         entry.lastAccessed = Date.now();
 
         // Determine which file to stream (Must always be an actual video file, never text/nfo/subs)
         let fileToStream = null;
         if (fileIdxParam !== undefined && fileIdxParam !== '') {
           const idx = parseInt(fileIdxParam, 10);
-          if (!isNaN(idx) && entry.files[idx] && isVideoFile(entry.files[idx].name)) {
+          if (!isNaN(idx) && entry.files && entry.files[idx] && isVideoFile(entry.files[idx].name)) {
             fileToStream = entry.files[idx];
           }
         }
 
         if (!fileToStream) {
-          fileToStream = entry.selectedFile || entry.files.find((f) => isVideoFile(f.name)) || entry.files[0];
+          fileToStream = entry.selectedFile || (entry.files && entry.files.find((f) => isVideoFile(f.name))) || (entry.files && entry.files[0]);
         }
 
         if (!fileToStream) {
-          res.writeHead(503, { 'Content-Type': 'text/plain' });
-          res.end('Torrent metadata resolving. Please retry in a moment.');
+          if (!res.headersSent && !clientDisconnected) {
+            res.writeHead(503, { 'Content-Type': 'text/plain' });
+            res.end('Torrent metadata resolving. Please retry in a moment.');
+          }
           return;
         }
 
-        // Prioritize downloading pieces for this file
-        try {
-          fileToStream.select();
-        } catch {}
-
         const ext = path.extname(fileToStream.name || '').toLowerCase();
-        const isMkvOrNeedsRemux =
-          ['.mkv', '.avi', '.ts', '.mov', '.vob'].includes(ext) ||
-          url.searchParams.get('remux') === '1';
+        const isNativePlayable = ['.mp4', '.m4v', '.webm'].includes(ext);
+        const isRemuxRequested = url.searchParams.get('remux') === '1' || url.searchParams.get('transcode') === '1';
+        const needsRemux = !isNativePlayable || isRemuxRequested;
 
         // A. ON-THE-FLY TRANSMUXING & REAL-TIME TRANSCODING
-        // Remuxes container to fragmented MP4 and transcodes HEVC to universal H.264 if needed
-        if (isMkvOrNeedsRemux) {
+        // For MKV and other containers needing remuxing to fragmented MP4
+        if (needsRemux) {
+          const fullFilePath = path.resolve(CACHE_DIR, fileToStream.path || fileToStream.name || 'stream.mkv');
+          const fileDir = path.dirname(fullFilePath);
+          if (!fs.existsSync(fileDir)) {
+            try {
+              fs.mkdirSync(fileDir, { recursive: true });
+            } catch {}
+          }
+
           const startSecParam = url.searchParams.get('start') || url.searchParams.get('t');
           const startSeconds = startSecParam ? Math.max(0, parseFloat(startSecParam)) : 0;
+
+          // Prioritize torrent piece downloading for target seek offset
+          try {
+            fileToStream.select();
+            if (entry.engine && entry.engine.torrent && fileToStream.length > 0) {
+              const pieceLength = entry.engine.torrent.pieceLength || 4194304;
+              const estDuration = 3000;
+              const estByteOffset = startSeconds > 0
+                ? Math.min(
+                    fileToStream.length - 1,
+                    Math.max(0, Math.floor((startSeconds / estDuration) * fileToStream.length))
+                  )
+                : 0;
+              const startPiece = Math.floor((fileToStream.offset + estByteOffset) / pieceLength);
+              const maxPiece = Math.floor(
+                (fileToStream.offset + fileToStream.length - 1) / pieceLength
+              );
+              entry.engine.select(startPiece, Math.min(maxPiece, startPiece + 12), true);
+            }
+          } catch (err) {
+            console.warn('[P2P Engine] Piece selection warning:', err.message);
+          }
+
+          // Wait until head chunks of the file are on disk in fullFilePath
+          const targetBytes = Math.min(fileToStream.length, 1024 * 1024);
+          try {
+            await waitForHeadChunks(fullFilePath, targetBytes, 30000, () => clientDisconnected);
+          } catch (err) {
+            if (!res.headersSent && !clientDisconnected) {
+              res.writeHead(503, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  error: 'Buffering initial chunks',
+                  message: err.message,
+                })
+              );
+            }
+            return;
+          }
+
+          if (clientDisconnected) return;
+
+          const isHEVC = /x265|h265|hevc|h\.265|x\.265/i.test(fileToStream.name || '') ||
+                         url.searchParams.get('hevc') === '1' ||
+                         url.searchParams.get('transcode') === '1';
 
           res.writeHead(200, {
             'Content-Type': 'video/mp4',
@@ -461,63 +554,33 @@ export function p2pMiddleware(req, res, next) {
             'Transfer-Encoding': 'chunked',
             'Cache-Control': 'no-cache, no-store',
             'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': 'Range, Content-Type, Accept',
+            'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
           });
 
-          const fullFilePath = fileToStream.path ? path.resolve(CACHE_DIR, fileToStream.path) : null;
-          const hasDiskFile = fullFilePath && fs.existsSync(fullFilePath);
-
-          // Prioritize torrent piece downloading for target seek offset
-          if (entry.engine && entry.engine.torrent && fileToStream.length > 0) {
-            const pieceLength = entry.engine.torrent.pieceLength || 4194304;
-            const estDuration = 3000;
-            const estByteOffset = Math.min(
-              fileToStream.length - 1,
-              Math.max(0, Math.floor((startSeconds / estDuration) * fileToStream.length))
-            );
-            const startPiece = Math.floor((fileToStream.offset + estByteOffset) / pieceLength);
-            const maxPiece = Math.floor(
-              (fileToStream.offset + fileToStream.length - 1) / pieceLength
-            );
-            entry.engine.select(startPiece, Math.min(maxPiece, startPiece + 12), true);
+          if (req.method === 'HEAD') {
+            res.end();
+            return;
           }
 
-          // If HEVC is detected, transcode video to universal H.264 in real-time so non-GPU browsers can play it
-          const videoCodecArgs = isHEVC
-            ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '24']
-            : ['-c:v', 'copy'];
-
-          let fileStream = null;
-          let ffmpegArgs;
-
-          if (hasDiskFile) {
-            // Seek directly in file on disk for instant (<500ms) seeking
-            ffmpegArgs = [
-              '-loglevel', 'error',
-              ...(startSeconds > 0 ? ['-ss', String(startSeconds)] : []),
-              '-i', fullFilePath,
-              ...videoCodecArgs,
-              '-c:a', 'aac',
-              '-b:a', '192k',
-              '-ac', '2',
-              '-f', 'mp4',
-              '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-              'pipe:1',
-            ];
-          } else {
-            fileStream = fileToStream.createReadStream();
-            ffmpegArgs = [
-              '-loglevel', 'error',
-              ...(startSeconds > 0 ? ['-ss', String(startSeconds)] : []),
-              '-i', 'pipe:0',
-              ...videoCodecArgs,
-              '-c:a', 'aac',
-              '-b:a', '192k',
-              '-ac', '2',
-              '-f', 'mp4',
-              '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-              'pipe:1',
-            ];
-          }
+          const ffmpegArgs = [
+            '-loglevel', 'error',
+            '-probesize', '1M',
+            '-analyzeduration', '1M',
+            '-fflags', '+nobuffer+fastseek',
+            ...(startSeconds > 0 ? ['-ss', String(startSeconds)] : []),
+            '-i', fullFilePath,
+            ...(isHEVC
+              ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency']
+              : ['-c:v', 'copy']),
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-ac', '2',
+            '-f', 'mp4',
+            '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+            'pipe:1',
+          ];
 
           const ffmpeg = spawn('ffmpeg', ffmpegArgs);
 
@@ -525,32 +588,38 @@ export function p2pMiddleware(req, res, next) {
           const cleanup = () => {
             if (cleaned) return;
             cleaned = true;
-            try { fileStream?.unpipe(); } catch {}
-            try { fileStream?.destroy(); } catch {}
-            try { ffmpeg.stdin?.destroy(); } catch {}
+            try { ffmpeg.stdout?.unpipe(res); } catch {}
             try { ffmpeg.stdout?.destroy(); } catch {}
-            try { ffmpeg.kill('SIGKILL'); } catch {}
+            try { ffmpeg.stdin?.destroy(); } catch {}
+            try { ffmpeg.stderr?.destroy(); } catch {}
+            try {
+              if (process.platform === 'win32') {
+                ffmpeg.kill();
+              } else {
+                ffmpeg.kill('SIGKILL');
+              }
+            } catch {}
           };
 
-          if (fileStream) {
-            fileStream.on('error', () => cleanup());
-            ffmpeg.stdin.on('error', () => cleanup());
-            fileStream.pipe(ffmpeg.stdin);
-          }
-          ffmpeg.stdout.on('error', () => cleanup());
-          ffmpeg.stdout.pipe(res);
-
-          req.on('close', cleanup);
-          res.on('finish', cleanup);
+          ffmpeg.stdout.on('error', cleanup);
           ffmpeg.on('error', (err) => {
-            console.warn('[P2P Engine] FFmpeg remux error:', err.message);
+            console.warn('[P2P Engine] FFmpeg process error:', err.message);
             cleanup();
-            try { res.end(); } catch {}
           });
+          ffmpeg.on('close', cleanup);
+          req.on('close', cleanup);
+          res.on('close', cleanup);
+          res.on('finish', cleanup);
+
+          ffmpeg.stdout.pipe(res);
           return;
         }
 
-        // B. NATIVE MP4 STREAMING with HTTP 206 Partial Content (Range requests)
+        // B. NATIVE MP4, WebM, and natively playable files with HTTP 206 Partial Content (Range requests)
+        try {
+          fileToStream.select();
+        } catch {}
+
         const totalSize = fileToStream.length;
         const mimeType = getMimeType(fileToStream.name);
         const range = req.headers.range;
@@ -564,6 +633,7 @@ export function p2pMiddleware(req, res, next) {
             res.writeHead(416, {
               'Content-Range': `bytes */${totalSize}`,
               'Content-Type': 'text/plain',
+              'Access-Control-Allow-Origin': '*',
             });
             res.end('Requested range not satisfiable');
             return;
@@ -591,12 +661,33 @@ export function p2pMiddleware(req, res, next) {
             'Accept-Ranges': 'bytes',
             'Content-Length': chunksize,
             'Content-Type': mimeType,
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': 'Range, Content-Type, Accept',
+            'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
           });
+
+          if (req.method === 'HEAD') {
+            res.end();
+            return;
+          }
 
           const stream = fileToStream.createReadStream({ start, end });
 
-          req.on('close', () => {
-            stream.destroy();
+          let streamCleaned = false;
+          const cleanup = () => {
+            if (streamCleaned) return;
+            streamCleaned = true;
+            try { stream.unpipe(res); } catch {}
+            try { stream.destroy(); } catch {}
+          };
+
+          req.on('close', cleanup);
+          res.on('close', cleanup);
+          res.on('finish', cleanup);
+          stream.on('error', (err) => {
+            cleanup();
+            console.warn('[P2P Engine] Stream read error:', err.message);
           });
 
           stream.pipe(res);
@@ -605,12 +696,33 @@ export function p2pMiddleware(req, res, next) {
             'Content-Length': totalSize,
             'Accept-Ranges': 'bytes',
             'Content-Type': mimeType,
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': 'Range, Content-Type, Accept',
+            'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
           });
+
+          if (req.method === 'HEAD') {
+            res.end();
+            return;
+          }
 
           const stream = fileToStream.createReadStream();
 
-          req.on('close', () => {
-            stream.destroy();
+          let streamCleaned = false;
+          const cleanup = () => {
+            if (streamCleaned) return;
+            streamCleaned = true;
+            try { stream.unpipe(res); } catch {}
+            try { stream.destroy(); } catch {}
+          };
+
+          req.on('close', cleanup);
+          res.on('close', cleanup);
+          res.on('finish', cleanup);
+          stream.on('error', (err) => {
+            cleanup();
+            console.warn('[P2P Engine] Stream read error:', err.message);
           });
 
           stream.pipe(res);
@@ -618,13 +730,15 @@ export function p2pMiddleware(req, res, next) {
       })
       .catch((err) => {
         console.error('[P2P Engine] Stream handler error:', err);
-        res.writeHead(503, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            error: 'Swarm Connecting',
-            message: err.message,
-          })
-        );
+        if (!res.headersSent && !clientDisconnected) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              error: 'Swarm Connecting',
+              message: err.message,
+            })
+          );
+        }
       });
 
     return;

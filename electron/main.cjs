@@ -1,14 +1,18 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, session } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
 
-// Enable hardware video acceleration and codecs for maximum performance
-app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport');
-app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
-app.commandLine.appendSwitch('ignore-gpu-blocklist');
+// Hardware video acceleration, decoding, and GPU flags for maximum playback performance
+app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport,VaapiVideoDecoder,VaapiVideoEncoder,CanvasOopRasterization');
+app.commandLine.appendSwitch('enable-accelerated-video-decode');
+app.commandLine.appendSwitch('enable-accelerated-mjpeg-decode');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+app.commandLine.appendSwitch('disable-web-security');
+app.commandLine.appendSwitch('allow-running-insecure-content');
 
 let mainWindow = null;
 let streamingServer = null;
@@ -19,7 +23,19 @@ async function startEmbeddedServer() {
     const distPath = path.join(__dirname, '../dist');
 
     streamingServer = http.createServer((req, res) => {
-      // 1. Let p2pMiddleware handle /stream, /stats, /addon-proxy, /subtitles-proxy
+      // Ensure CORS headers for all 127.0.0.1:5173 requests
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Accept, Authorization, Origin, X-Requested-With');
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      // 1. Let p2pMiddleware handle /stream, /stats, /addon-proxy, /subtitles-proxy, /p2p-health, /p2p-cache
       p2pMiddleware(req, res, () => {
         // 2. Serve static production assets from dist
         let reqPath = (req.url || '/').split('?')[0];
@@ -50,6 +66,8 @@ async function startEmbeddedServer() {
           res.writeHead(200, {
             'Content-Type': mimeTypes[ext] || 'application/octet-stream',
             'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': '*',
           });
           return fs.createReadStream(filePath).pipe(res);
         }
@@ -60,6 +78,8 @@ async function startEmbeddedServer() {
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
             'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': '*',
           });
           return fs.createReadStream(indexPath).pipe(res);
         }
@@ -109,6 +129,18 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
     },
   });
+
+  // Enable CORS headers on all session web requests (for 127.0.0.1:5173 and external addons)
+  if (session && session.defaultSession) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      const responseHeaders = Object.assign({}, details.responseHeaders);
+      responseHeaders['access-control-allow-origin'] = ['*'];
+      responseHeaders['access-control-allow-methods'] = ['GET, HEAD, POST, PUT, DELETE, OPTIONS'];
+      responseHeaders['access-control-allow-headers'] = ['*'];
+      responseHeaders['access-control-expose-headers'] = ['Content-Range, Content-Length, Accept-Ranges'];
+      callback({ responseHeaders });
+    });
+  }
 
   const appUrl = 'http://127.0.0.1:5173';
 

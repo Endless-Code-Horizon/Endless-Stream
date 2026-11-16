@@ -362,8 +362,14 @@ export function VideoPlayer({
     }
   }, [])
 
-  // Unlock orientation and cleanup ExoPlayer on unmount
+  // Unlock orientation and cleanup ExoPlayer on unmount, and set transparency on Android
   useEffect(() => {
+    const isExo = isExoPlayerSupported()
+    if (isExo) {
+      document.body.style.backgroundColor = 'transparent'
+      document.documentElement.style.backgroundColor = 'transparent'
+    }
+
     return () => {
       if (Capacitor.isNativePlatform()) {
         ScreenOrientation.unlock().catch(() => {})
@@ -372,7 +378,9 @@ export function VideoPlayer({
           screen.orientation.unlock()
         } catch {}
       }
-      if (isExoPlayerSupported()) {
+      if (isExo) {
+        document.body.style.backgroundColor = '#0a0a0a'
+        document.documentElement.style.backgroundColor = '#0a0a0a'
         exoDestroy()
       }
     }
@@ -910,6 +918,12 @@ export function VideoPlayer({
   }
 
   const toggleMute = () => {
+    if (isExoPlayerSupported()) {
+      const nextMuted = !isMuted
+      setIsMuted(nextMuted)
+      exoSetVolume(nextMuted ? 0 : (volume || 1))
+      return
+    }
     const video = videoRef.current
     if (!video) return
     const nextMuted = !video.muted
@@ -1272,13 +1286,13 @@ export function VideoPlayer({
       tabIndex={0}
       aria-label="Video Player"
     >
-      {/* Video Element (transparent if ExoPlayer native backend is driving playback) */}
+      {/* Video Element (hidden if ExoPlayer native backend is driving playback) */}
       <video
         ref={videoRef}
         src={isExoPlayerSupported() ? undefined : initialVideoSrc}
         className={
           isExoPlayerSupported()
-            ? 'opacity-0 pointer-events-none w-full h-full'
+            ? 'hidden'
             : 'w-full h-full object-contain bg-black'
         }
         playsInline

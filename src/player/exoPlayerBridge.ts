@@ -19,7 +19,7 @@ export interface NativeStatus {
 
 interface ExoPlayerPluginInterface {
   isAvailable(): Promise<{ available: boolean; engine: string }>
-  load(options: { url: string; positionMs?: number; autoPlay?: boolean }): Promise<{ success: boolean }>
+  load(options: { url: string; positionMs?: number; autoPlay?: boolean }): Promise<{ success: boolean; url?: string }>
   play(): Promise<void>
   pause(): Promise<void>
   seekTo(options: { positionMs: number }): Promise<void>
@@ -40,7 +40,15 @@ export const isExoPlayerSupported = (): boolean => {
 export async function exoLoad(url: string, positionMs = 0, autoPlay = true): Promise<boolean> {
   if (!isExoPlayerSupported()) return false
   try {
-    const res = await ExoPlayer.load({ url, positionMs, autoPlay })
+    let finalUrl = url.trim()
+    if (!/^https?:\/\/|^file:\/\/|^content:\/\/|^asset:\/\//i.test(finalUrl)) {
+      if (finalUrl.startsWith('/')) {
+        finalUrl = `http://localhost:5173${finalUrl}`
+      } else {
+        finalUrl = `http://localhost:5173/${finalUrl}`
+      }
+    }
+    const res = await ExoPlayer.load({ url: finalUrl, positionMs, autoPlay })
     return Boolean(res.success)
   } catch (err) {
     console.warn('[ExoPlayerBridge] Load failed:', err)
