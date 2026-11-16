@@ -4,10 +4,12 @@ import { AddonProvider } from './providers/AddonProvider';
 
 const ADDON_STORAGE_KEY = 'endless_stream:addon_urls';
 
-// Default official catalog addons enabled out of the box (Free open metadata)
+// Default official ethical and legal addons enabled out of the box (Free open metadata & subtitles)
 // Stream and scrape addons are never pre-bundled; users have complete freedom to install community addons via the Addon Manager.
 export const DEFAULT_ADDON_URLS = [
   'https://v3-cinemeta.strem.io', // Official Cinemeta (Movies & TV Shows catalogs, metadata & search)
+  'https://opensubtitles-v3.strem.io', // Official OpenSubtitles v3 (Subtitles)
+  'https://watchhub.strem.io', // Official WatchHub (Legal streaming availability)
 ];
 
 const providers: ContentProvider[] = [];
@@ -51,7 +53,7 @@ export function initProviders(): void {
     registerProvider(new TmdbProvider());
   }
 
-  // 3. Stremio Addons (Cinemeta + User installed addons like Torrentio, CyberFlix, etc.)
+  // 3. Stremio Addons (Official open catalogs + User installed community addons)
   const addonUrls = getSavedAddonUrls();
   for (const url of addonUrls) {
     const addon = new AddonProvider(url);

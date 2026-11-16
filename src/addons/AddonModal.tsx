@@ -12,12 +12,17 @@ const PRESET_ADDONS = [
   {
     name: 'Cinemeta',
     url: 'https://v3-cinemeta.strem.io',
-    tag: 'Metadata & Catalogs',
+    tag: 'Official Catalogs & Metadata',
   },
   {
-    name: 'Torrentio',
-    url: 'https://torrentio.strem.fun',
-    tag: 'P2P & Debrid Streams',
+    name: 'OpenSubtitles v3',
+    url: 'https://opensubtitles-v3.strem.io',
+    tag: 'Official Subtitles',
+  },
+  {
+    name: 'WatchHub',
+    url: 'https://watchhub.strem.io',
+    tag: 'Legal Streaming Directories',
   },
   {
     name: 'CyberFlix',
@@ -27,12 +32,7 @@ const PRESET_ADDONS = [
   {
     name: 'Anime Kitsu',
     url: 'https://anime-kitsu.strem.fun',
-    tag: 'Anime Catalogs & Streams',
-  },
-  {
-    name: 'OpenSubtitles v3',
-    url: 'https://opensubtitles-v3.strem.io',
-    tag: 'Subtitles',
+    tag: 'Anime Catalogs & Metadata',
   },
 ]
 

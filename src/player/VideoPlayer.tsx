@@ -140,7 +140,7 @@ function parseStreamClean(src: StreamSource, fallbackTitle = 'Movie'): CleanStre
   // Clean release title (strip leading [P2P] or tracker noise)
   let cleanTitle = (src.filename || src.label || fallbackTitle)
     .replace(/^\[P2P\]\s*/i, '')
-    .replace(/^Torrentio\s*[-·]\s*/i, '')
+    .replace(/^(?:Provider|Stream|Addon)\s*[-·]\s*/i, '')
     .replace(/^4k\s*DV\s*\|\s*HDR10\+\s*-\s*/i, '')
     .replace(/\s*⚙️[^\n]*/g, '')
     .replace(/\s*👤\s*\d+[^\n]*/g, '')
@@ -1188,7 +1188,7 @@ export function VideoPlayer({
         </div>
         <p className="text-2xl font-bold text-white mb-2">No Stream Sources Available</p>
         <p className="text-sm text-white/60 max-w-md leading-relaxed mb-6">
-          This title was loaded from a catalog. To stream this content, install a Stremio stream addon (such as Torrentio) in the Addon Manager.
+          This title was loaded from a catalog. To stream this content, install a Stremio stream add-on in the Addon Manager.
         </p>
         <div className="flex items-center gap-3">
           {onBack && (

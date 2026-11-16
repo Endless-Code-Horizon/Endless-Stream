@@ -104,8 +104,8 @@ export function Navbar() {
           </NavLink>
         </div>
 
-        {/* Floating Living Apple TV+ Capsule Navigation Bar (Centered) */}
-        <div className="relative pointer-events-auto mx-auto group/navbar">
+        {/* Floating Living Apple TV+ Capsule Navigation Bar (Strict Mathematically Top-Centered) */}
+        <div className="absolute left-1/2 -translate-x-1/2 pointer-events-auto group/navbar">
           {/* Living Ambient Aura Behind Capsule */}
           <div className="absolute -inset-1.5 rounded-full bg-gradient-to-r from-white/10 via-white/30 to-white/10 blur-xl opacity-40 group-hover/navbar:opacity-90 group-hover/navbar:scale-105 group-hover/navbar:blur-2xl transition-all duration-700 pointer-events-none" />
 

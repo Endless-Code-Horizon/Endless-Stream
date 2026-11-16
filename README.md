@@ -18,7 +18,7 @@
 
 Endless Stream is a high-performance open-source streaming ecosystem engineered from the ground up to deliver a premium, Apple TV+ living creature glassmorphic experience on Windows Desktop, Android, and Web platforms.
 
-Built upon an unbundled, zero-cost freedom architecture, Endless Stream functions identically to Stremio: the application hosts, bundles, and maintains zero stream scrapers, torrent indexes, or third-party media hosts out of the box. Instead, Endless Stream provides pure, open technology. Users are equipped with an open Addon Engine compatible with standard Stremio v3 manifests, allowing total sovereignty to install community add-ons (such as Torrentio, Anime Kitsu, or CyberFlix) directly from the visual Addon Manager.
+Built upon an unbundled, zero-cost freedom architecture, Endless Stream functions identically to Stremio: the application hosts, bundles, and maintains zero stream scrapers, torrent indexes, or third-party media hosts out of the box. Instead, Endless Stream provides pure, open technology. Users are equipped with an open Addon Engine compatible with standard Stremio v3 manifests, allowing total sovereignty to install community add-ons (such as Anime Kitsu, CyberFlix, or custom manifests) directly from the visual Addon Manager.
 
 Out of the box, the system connects strictly to official free metadata catalogs (such as Cinemeta) and curated public-domain showcase media, ensuring legal compliance, zero subscription requirements, and absolute user freedom.
 
@@ -57,17 +57,17 @@ flowchart TD
 
 In strict alignment with the Stremio philosophy, Endless Stream strictly decouples the client technology from content scraping:
 
-1. **Zero Pre-bundled Torrent Addons**: Endless Stream never bundles Torrentio, torrent aggregators, or unauthorized scrapers.
+1. **Zero Pre-bundled Torrent Scrapers**: Endless Stream never bundles torrent scrapers, aggregators, or unauthorized third-party indexes.
 2. **Open Addon Protocol**: The client natively interprets Stremio v3 manifest schemas (`manifest.json`), supporting `catalog`, `meta`, `stream`, and `subtitles` resource directives.
-3. **User Sovereignty**: Users retain complete discretion to paste any community manifest URL (e.g., `https://torrentio.strem.fun/manifest.json`) or install popular community add-ons with a single tap in the Addon Manager.
+3. **User Sovereignty**: Users retain complete discretion to paste any community manifest URL or install popular community add-ons with a single tap in the Addon Manager.
 4. **Local Execution**: All addon queries execute directly from your client machine; no centralized tracking or intermediary telemetry exists.
 
 ```mermaid
 flowchart LR
     Client["Endless Stream Client"]
     AddonMgr["Addon Manager"]
-    Cinemeta["Cinemeta Official Catalog<br/>(Free Open Metadata)"]
-    Community["Community Addons<br/>(User-Configured, e.g. Torrentio)"]
+    Cinemeta["Cinemeta & Legal Catalogs<br/>(Free Open Metadata)"]
+    Community["Community Addons<br/>(User-Configured)"]
     Media["Playback Pipeline"]
 
     Client --> AddonMgr
@@ -238,7 +238,7 @@ Yes. Endless Stream is 100% free and open-source software under the MIT License.
 No. Endless Stream features its own built-in native BitTorrent P2P streaming engine. You can stream directly from peer-to-peer swarms at $0 cost without any third-party debrid accounts. If an addon provides direct HTTP debrid streams, Endless Stream will play them natively as well.
 
 #### What addons can I use with Endless Stream?
-Endless Stream is compatible with all standard Stremio v3 community addons. This includes Torrentio, Anime Kitsu, CyberFlix, OpenSubtitles, and custom self-hosted manifests.
+Endless Stream is compatible with all standard Stremio v3 community addons. This includes Anime Kitsu, CyberFlix, OpenSubtitles, WatchHub, and custom self-hosted manifests.
 
 ### Video Player & Seeking
 
