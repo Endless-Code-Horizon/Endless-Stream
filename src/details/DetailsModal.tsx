@@ -170,10 +170,6 @@ export function DetailsModal() {
   // Dynamic promotional hook / tagline
   const getTagline = () => {
     if (!media) return ''
-    if (media.title === 'The Sandman') return "It's Official: More Episodes Are Coming"
-    if (media.title === 'Silo') return 'Watch the Season Finale Now'
-    if (media.title === 'Big Buck Bunny') return 'A Timeless Animated Classic'
-    if (media.title === 'Sintel') return 'An Epic Quest Across Forgotten Lands'
     return media.subtitle || (media.genres && media.genres.length > 0 ? media.genres.slice(0, 3).join(' · ') : '')
   }
 

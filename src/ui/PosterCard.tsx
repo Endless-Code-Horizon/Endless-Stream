@@ -16,45 +16,57 @@ export function PosterCard({ item, skeleton, progress: _progress, onRemove }: Po
   if (skeleton || !item) {
     return (
       <div className="w-full animate-pulse">
-        <div className="aspect-video w-full rounded-xl bg-white/10" />
+        <div className="aspect-[2/3] sm:aspect-video w-full rounded-xl bg-white/10" />
       </div>
     )
   }
 
+  const mobileImageUrl = item.poster || item.thumbnail || item.backdrop || ''
   const hasDedicatedBackdrop = Boolean(item.backdrop && item.backdrop !== item.poster)
-  const imageUrl = hasDedicatedBackdrop ? item.backdrop! : (item.poster || item.thumbnail || '')
-  const showFallback = !imageUrl || imgError
+  const desktopImageUrl = hasDedicatedBackdrop ? item.backdrop! : mobileImageUrl
+  const showFallback = (!mobileImageUrl && !desktopImageUrl) || imgError
 
   return (
     <div
       onClick={() => openModal(item.type, item.id)}
       className="group flex flex-col text-left cursor-pointer select-none transition-transform duration-300 w-full"
     >
-      {/* 16:9 Landscape Thumbnail Container */}
-      <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-gradient-to-br from-[#262424] to-[#141414] border border-white/10 shadow-lg transition-all duration-300 group-hover:scale-105 group-hover:ring-2 group-hover:ring-white group-hover:shadow-2xl group-hover:shadow-black/90">
+      {/* Aspect Ratio: Portrait 2:3 on mobile (classic movie poster), 16:9 Landscape on desktop */}
+      <div className="relative aspect-[2/3] sm:aspect-video w-full rounded-xl overflow-hidden bg-gradient-to-br from-[#262424] to-[#141414] border border-white/10 shadow-lg transition-all duration-300 group-hover:scale-105 group-hover:ring-2 group-hover:ring-white group-hover:shadow-2xl group-hover:shadow-black/90">
         {!showFallback ? (
-          <img
-            src={imageUrl}
-            alt={item.title}
-            loading="lazy"
-            onError={() => setImgError(true)}
-            className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
-          />
+          <>
+            {/* Mobile Vertical Poster (Portrait) */}
+            <img
+              src={mobileImageUrl}
+              alt={item.title}
+              loading="lazy"
+              onError={() => setImgError(true)}
+              className="sm:hidden w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
+            />
+            {/* Desktop Landscape / Backdrop */}
+            <img
+              src={desktopImageUrl}
+              alt={item.title}
+              loading="lazy"
+              onError={() => setImgError(true)}
+              className="hidden sm:block w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
+            />
+          </>
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-[#1a1a1a]">
-            <span className="text-xl font-bold text-white tracking-widest uppercase">
+          <div className="w-full h-full flex flex-col items-center justify-center p-3 sm:p-4 text-center bg-[#1a1a1a]">
+            <span className="text-sm sm:text-lg font-bold text-white tracking-wider uppercase line-clamp-2">
               {item.title}
             </span>
           </div>
         )}
 
-        {/* Transparent Title Logo or Inset Typography (Apple TV+ style) */}
+        {/* Content Title Logo Image if provided (no ugly text clutter) */}
         {item.logo ? (
-          <div className="absolute inset-x-3 bottom-3 flex items-center justify-start pointer-events-none z-20">
+          <div className="absolute inset-x-2.5 bottom-2.5 flex items-center justify-start pointer-events-none z-20">
             <img
               src={item.logo}
               alt=""
-              className="max-h-8 max-w-[70%] object-contain drop-shadow-md"
+              className="max-h-6 sm:max-h-8 max-w-[80%] object-contain drop-shadow-md"
             />
           </div>
         ) : null}

@@ -19,9 +19,9 @@ export function Grid({ items, loading, itemsPerPage = 60 }: GridProps) {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-5 w-full">
+      <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-5 w-full">
         {Array.from({ length: 18 }).map((_, i) => (
-          <div key={i} className="aspect-video w-full rounded-xl bg-white/10 animate-pulse" />
+          <div key={i} className="aspect-[2/3] sm:aspect-video w-full rounded-xl bg-white/10 animate-pulse" />
         ))}
       </div>
     )
@@ -49,7 +49,7 @@ export function Grid({ items, loading, itemsPerPage = 60 }: GridProps) {
 
   return (
     <div ref={containerRef} className="space-y-8 w-full">
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-5 w-full">
+      <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-5 w-full">
         {paginatedItems.map((item) => (
           <PosterCard key={item.id} item={item} />
         ))}

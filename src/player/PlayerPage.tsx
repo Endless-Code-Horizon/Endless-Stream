@@ -22,7 +22,7 @@ export function PlayerPage() {
       : undefined
 
   const activeProfile = useProfileStore((s) => s.getActiveProfile())
-  const { getProgress, saveProgress } = useProgressStore()
+  const { getProgress, saveProgress, removeProgress } = useProgressStore()
 
   const { data: media } = useMeta(mediaType, mediaId)
   const { data: streams, loading: streamsLoading } = useStreams(

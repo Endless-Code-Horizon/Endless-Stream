@@ -2,6 +2,28 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import type { StreamSource, MediaType, EpisodeRef } from '@/types'
 import { useUIStore } from '@/app/uiStore'
 import { LoomBoxLoading } from './LoomBoxLoading'
+import { ScreenOrientation } from '@capacitor/screen-orientation'
+import { Capacitor } from '@capacitor/core'
+import {
+  isExoPlayerSupported,
+  exoLoad,
+  exoPlay,
+  exoPause,
+  exoSeekTo,
+  exoSetVolume,
+  exoGetStatus,
+  exoGetAudioTracks,
+  exoSetAudioTrack,
+  exoDestroy,
+} from './exoPlayerBridge'
+
+export interface AudioTrackItem {
+  id: string | number
+  label: string
+  language: string
+  channels?: number
+  selected: boolean
+}
 
 interface VideoPlayerProps {
   sources: StreamSource[]
@@ -301,6 +323,126 @@ export function VideoPlayer({
   const [subBoxStyle, setSubBoxStyle] = useState<'box' | 'glow'>('box')
   const [subOffset, setSubOffset] = useState<number>(0)
 
+  // Audio Tracks State
+  const audioDropdownRef = useRef<HTMLDivElement>(null)
+  const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([])
+  const [selectedAudioTrack, setSelectedAudioTrack] = useState<string | number>(0)
+  const [audioMenuOpen, setAudioMenuOpen] = useState(false)
+
+  // Mobile 3-Dot Menu & Screen Orientation States
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileTab, setMobileTab] = useState<'audio' | 'subtitles' | 'streams'>('audio')
+  const [isLandscape, setIsLandscape] = useState(false)
+
+  // Screen Rotation Toggle (Landscape / Portrait)
+  const toggleOrientation = useCallback(async () => {
+    try {
+      if (Capacitor.isNativePlatform()) {
+        const current = await ScreenOrientation.orientation()
+        if (current.type.includes('portrait')) {
+          await ScreenOrientation.lock({ orientation: 'landscape' })
+          setIsLandscape(true)
+        } else {
+          await ScreenOrientation.unlock()
+          setIsLandscape(false)
+        }
+      } else if (screen.orientation && screen.orientation.lock) {
+        if (screen.orientation.type.includes('portrait')) {
+          await screen.orientation.lock('landscape').catch(() => {})
+          setIsLandscape(true)
+        } else {
+          screen.orientation.unlock()
+          setIsLandscape(false)
+        }
+      } else {
+        setIsLandscape((prev) => !prev)
+      }
+    } catch {
+      setIsLandscape((prev) => !prev)
+    }
+  }, [])
+
+  // Unlock orientation and cleanup ExoPlayer on unmount
+  useEffect(() => {
+    return () => {
+      if (Capacitor.isNativePlatform()) {
+        ScreenOrientation.unlock().catch(() => {})
+      } else if (screen.orientation && screen.orientation.unlock) {
+        try {
+          screen.orientation.unlock()
+        } catch {}
+      }
+      if (isExoPlayerSupported()) {
+        exoDestroy()
+      }
+    }
+  }, [])
+
+  // Refresh and detect available audio tracks (ExoPlayer on Android, HTML5 audioTracks on Desktop)
+  const refreshAudioTracks = useCallback(async () => {
+    if (isExoPlayerSupported()) {
+      const nativeTracks = await exoGetAudioTracks()
+      if (nativeTracks && nativeTracks.length > 0) {
+        const items: AudioTrackItem[] = nativeTracks.map((t) => ({
+          id: t.index,
+          label: t.label || `Audio Track ${t.index + 1}`,
+          language: t.language,
+          channels: t.channels,
+          selected: t.isSelected,
+        }))
+        setAudioTracks(items)
+        const active = items.find((i) => i.selected)
+        if (active) setSelectedAudioTrack(active.id)
+        return
+      }
+    }
+
+    const video = videoRef.current as any
+    if (video && video.audioTracks && video.audioTracks.length > 0) {
+      const list: AudioTrackItem[] = []
+      for (let i = 0; i < video.audioTracks.length; i++) {
+        const track = video.audioTracks[i]
+        list.push({
+          id: i,
+          label: track.label || LANGUAGE_LABELS[track.language] || `Audio Track ${i + 1}`,
+          language: track.language || 'und',
+          selected: track.enabled,
+        })
+      }
+      setAudioTracks(list)
+      const active = list.find((i) => i.selected)
+      if (active) setSelectedAudioTrack(active.id)
+    } else {
+      const streamAudio = currentCleanInfo?.audio?.[0] || 'Stereo'
+      setAudioTracks([
+        { id: 0, label: `Original Audio (${streamAudio})`, language: 'en', selected: true },
+      ])
+      setSelectedAudioTrack(0)
+    }
+  }, [currentCleanInfo?.audio])
+
+  // Select an audio track
+  const handleSelectAudioTrack = async (trackId: string | number) => {
+    setSelectedAudioTrack(trackId)
+    if (isExoPlayerSupported()) {
+      await exoSetAudioTrack(Number(trackId))
+      setAudioTracks((prev) =>
+        prev.map((t) => ({ ...t, selected: t.id === trackId }))
+      )
+      return
+    }
+
+    const video = videoRef.current as any
+    if (video && video.audioTracks) {
+      for (let i = 0; i < video.audioTracks.length; i++) {
+        video.audioTracks[i].enabled = i === Number(trackId)
+      }
+    }
+    setAudioTracks((prev) =>
+      prev.map((t) => ({ ...t, selected: t.id === trackId }))
+    )
+  }
+
   // Torrent Streams Drawer State
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerFilter, setDrawerFilter] = useState<'all' | '4k' | '1080p'>('all')
@@ -319,7 +461,52 @@ export function VideoPlayer({
     setPlaybackError(null)
     userPausedRef.current = false
     hasStartedRef.current = false
-  }, [currentSource?.url])
+
+    // Load native ExoPlayer on Android APK
+    if (isExoPlayerSupported() && currentSource?.url) {
+      exoLoad(currentSource.url, (startTimeRef.current || 0) * 1000, true).then(() => {
+        setIsPlaying(true)
+        setTimeout(() => {
+          refreshAudioTracks()
+        }, 1200)
+      })
+    }
+  }, [currentSource?.url, refreshAudioTracks])
+
+  // Native status polling for ExoPlayer (Android)
+  useEffect(() => {
+    if (!isExoPlayerSupported()) return
+    let active = true
+
+    const interval = setInterval(async () => {
+      if (!active) return
+      const status = await exoGetStatus()
+      if (!status) return
+
+      if (!isScrubbingRef.current) {
+        setCurrentTime(status.currentTime)
+      }
+      if (status.duration > 10) {
+        setDuration(status.duration)
+      }
+      setIsPlaying(status.isPlaying)
+      setBuffered(status.buffered)
+      if (status.currentTime > 0 || !status.isBuffering) {
+        setIsPrebuffering(false)
+      }
+      if (onTimeUpdateRef.current) {
+        onTimeUpdateRef.current(status.currentTime, status.duration || displayDuration)
+      }
+      if (status.duration > 0 && status.currentTime >= status.duration - 1) {
+        if (onEndedRef.current) onEndedRef.current()
+      }
+    }, 400)
+
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [displayDuration])
 
   // Fetch OpenSubtitles from Stremio OpenSubtitles v3 Addon
   useEffect(() => {
@@ -481,11 +668,11 @@ export function VideoPlayer({
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
     hideTimerRef.current = window.setTimeout(() => {
       const isActuallyPlaying = videoRef.current ? !videoRef.current.paused : isPlaying
-      if (isActuallyPlaying && !subtitleMenuOpen && !isScrubbing && !drawerOpen) {
+      if (isActuallyPlaying && !subtitleMenuOpen && !audioMenuOpen && !mobileMenuOpen && !isScrubbing && !drawerOpen) {
         setControlsVisible(false)
       }
     }, 3500)
-  }, [isPlaying, subtitleMenuOpen, isScrubbing, drawerOpen])
+  }, [isPlaying, subtitleMenuOpen, audioMenuOpen, mobileMenuOpen, isScrubbing, drawerOpen])
 
   // Helper to accurately resolve target seek timestamp from click / touch X position
   const getTimeFromClientX = useCallback(
@@ -504,9 +691,15 @@ export function VideoPlayer({
     [displayDuration]
   )
 
-  // Native Seamless Seeking: operates reliably within buffer and over HTTP range requests without destroying stream
+  // Native Seamless Seeking: operates reliably within buffer, ExoPlayer, and over HTTP range requests
   const seekToTime = useCallback(
     (targetTime: number) => {
+      if (isExoPlayerSupported()) {
+        exoSeekTo(targetTime * 1000)
+        setCurrentTime(targetTime)
+        return
+      }
+
       const video = videoRef.current
       if (!video) return
 
@@ -607,6 +800,22 @@ export function VideoPlayer({
   }
 
   const togglePlayPause = () => {
+    if (isExoPlayerSupported()) {
+      if (isPlaying) {
+        userPausedRef.current = true
+        exoPause()
+        setIsPlaying(false)
+        triggerRipple('pause')
+      } else {
+        userPausedRef.current = false
+        hasStartedRef.current = true
+        exoPlay()
+        setIsPlaying(true)
+        triggerRipple('play')
+      }
+      return
+    }
+
     const video = videoRef.current
     if (!video) return
     if (video.paused) {
@@ -694,11 +903,15 @@ export function VideoPlayer({
   }
 
   const handleVolumeChange = (newVol: number) => {
+    const clamped = Math.max(0, Math.min(1, newVol))
+    setVolume(clamped)
+    if (isExoPlayerSupported()) {
+      exoSetVolume(clamped)
+      return
+    }
     const video = videoRef.current
     if (!video) return
-    const clamped = Math.max(0, Math.min(1, newVol))
     video.volume = clamped
-    setVolume(clamped)
     if (clamped === 0) {
       video.muted = true
       setIsMuted(true)
@@ -718,7 +931,7 @@ export function VideoPlayer({
     }
   }
 
-  // Click outside subtitle menu
+  // Click outside subtitle or audio menu
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
@@ -726,6 +939,12 @@ export function VideoPlayer({
         !subtitleDropdownRef.current.contains(e.target as Node)
       ) {
         setSubtitleMenuOpen(false)
+      }
+      if (
+        audioDropdownRef.current &&
+        !audioDropdownRef.current.contains(e.target as Node)
+      ) {
+        setAudioMenuOpen(false)
       }
     }
     window.addEventListener('mousedown', handleClickOutside)
@@ -741,7 +960,7 @@ export function VideoPlayer({
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
   }, [])
 
-  // Keyboard Shortcuts (Space, J, L, M, F, Esc, S, C)
+  // Keyboard Shortcuts (Space, J, L, M, F, Esc, S, C, A, R)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
@@ -786,12 +1005,22 @@ export function VideoPlayer({
           setSubtitleMenuOpen((prev) => !prev)
           resetHideTimer()
           break
+        case 'a':
+          e.preventDefault()
+          setAudioMenuOpen((prev) => !prev)
+          resetHideTimer()
+          break
+        case 'r':
+          e.preventDefault()
+          toggleOrientation()
+          resetHideTimer()
+          break
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [resetHideTimer])
+  }, [resetHideTimer, toggleOrientation])
 
   // Stable refs for callbacks so video.load() is NEVER triggered by time updates
   const onTimeUpdateRef = useRef(onTimeUpdate)
@@ -857,6 +1086,8 @@ export function VideoPlayer({
             video.play().then(() => setIsPlaying(true)).catch(() => {})
           })
       }
+
+      refreshAudioTracks()
     }
 
     const onCanPlay = () => {
@@ -1018,15 +1249,19 @@ export function VideoPlayer({
     <div
       ref={containerRef}
       onMouseMove={handleMouseMove}
-      className="relative w-screen h-screen bg-black overflow-hidden select-none cursor-default group"
+      className={`relative w-screen h-screen ${isExoPlayerSupported() ? 'bg-transparent' : 'bg-black'} overflow-hidden select-none cursor-default group`}
       tabIndex={0}
       aria-label="Video Player"
     >
-      {/* Video Element */}
+      {/* Video Element (transparent if ExoPlayer native backend is driving playback) */}
       <video
         ref={videoRef}
-        src={initialVideoSrc}
-        className="w-full h-full object-contain bg-black"
+        src={isExoPlayerSupported() ? undefined : initialVideoSrc}
+        className={
+          isExoPlayerSupported()
+            ? 'opacity-0 pointer-events-none w-full h-full'
+            : 'w-full h-full object-contain bg-black'
+        }
         playsInline
       />
 
@@ -1352,262 +1587,608 @@ export function VideoPlayer({
               </div>
             </div>
 
-            {/* RIGHT CONTROLS: Minimalist Streams Selector, OpenSubtitles & Fullscreen */}
+            {/* RIGHT CONTROLS: Desktop Multi-Button Bar + Mobile Clean 3-Dot Group */}
             <div className="flex items-center gap-1.5 sm:gap-2.5">
-              {/* Minimalist Streams Button */}
-              <button
-                type="button"
-                onClick={() => setDrawerOpen(!drawerOpen)}
-                className={`h-7 sm:h-10 px-2.5 sm:px-3.5 rounded-full flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                  drawerOpen
-                    ? 'bg-white text-black font-bold shadow-xl'
-                    : 'bg-white/10 hover:bg-white/20 text-white'
-                }`}
-                title="Available Streams (S)"
-                aria-label="Stream Sources"
-                aria-expanded={drawerOpen}
-              >
-                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
-                  <path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16" />
-                  <circle cx="5" cy="19" r="1" />
-                </svg>
-                <span className="text-[11px] sm:text-xs font-semibold tracking-wide font-mono">
-                  {currentCleanInfo
-                    ? formatStreamPill(
-                        currentCleanInfo.resolution,
-                        swarmStats?.peers ?? currentCleanInfo.seeders
-                      )
-                    : 'Streams'}
-                </span>
-              </button>
-
-              {/* Subtitles & Styling Popover Menu (CC) */}
-              <div className="relative" ref={subtitleDropdownRef}>
+              {/* DESKTOP ONLY: Streams Selector, Audio Tracks, OpenSubtitles, Rotate & Fullscreen */}
+              <div className="hidden sm:flex items-center gap-2">
+                {/* Streams Button */}
                 <button
                   type="button"
-                  onClick={() => setSubtitleMenuOpen(!subtitleMenuOpen)}
-                  className={`w-7 h-7 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                    selectedSubId !== 'off'
-                      ? 'bg-white text-black font-bold shadow-lg'
+                  onClick={() => setDrawerOpen(!drawerOpen)}
+                  className={`h-10 px-3.5 rounded-full flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                    drawerOpen
+                      ? 'bg-white text-black font-bold shadow-xl'
                       : 'bg-white/10 hover:bg-white/20 text-white'
                   }`}
-                  title="Subtitles & Styling (C)"
-                  aria-label="Subtitles"
-                  aria-expanded={subtitleMenuOpen}
+                  title="Available Streams (S)"
+                  aria-label="Stream Sources"
+                  aria-expanded={drawerOpen}
                 >
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 24 24">
-                    <path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z" />
+                  <svg className="w-4 h-4 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
+                    <path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16" />
+                    <circle cx="5" cy="19" r="1" />
                   </svg>
+                  <span className="text-xs font-semibold tracking-wide font-mono">
+                    {currentCleanInfo
+                      ? formatStreamPill(
+                          currentCleanInfo.resolution,
+                          swarmStats?.peers ?? currentCleanInfo.seeders
+                        )
+                      : 'Streams'}
+                  </span>
                 </button>
 
-                {subtitleMenuOpen && (
-                  <div className="fixed inset-x-3 bottom-20 sm:absolute sm:inset-x-auto sm:right-0 sm:bottom-14 sm:w-80 max-h-[60vh] sm:max-h-none overflow-y-auto bg-[#161618]/95 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150 text-white">
-                    {/* Subtitle Tabs Header */}
-                    <div className="flex items-center border-b border-white/10 bg-white/[0.02]">
-                      <button
-                        type="button"
-                        onClick={() => setSubTab('tracks')}
-                        className={`flex-1 py-2.5 text-xs font-semibold text-center transition-colors cursor-pointer ${
-                          subTab === 'tracks'
-                            ? 'text-white border-b-2 border-white font-bold bg-white/5'
-                            : 'text-white/50 hover:text-white'
-                        }`}
-                      >
-                        Subtitles ({subtitlesList.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSubTab('style')}
-                        className={`flex-1 py-2.5 text-xs font-semibold text-center transition-colors cursor-pointer ${
-                          subTab === 'style'
-                            ? 'text-white border-b-2 border-white font-bold bg-white/5'
-                            : 'text-white/50 hover:text-white'
-                        }`}
-                      >
-                        Styling & Sync
-                      </button>
-                    </div>
+                {/* Desktop Audio Tracks Popover Menu */}
+                <div className="relative" ref={audioDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setAudioMenuOpen(!audioMenuOpen)}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                      audioMenuOpen
+                        ? 'bg-white text-black font-bold shadow-lg'
+                        : 'bg-white/10 hover:bg-white/20 text-white'
+                    }`}
+                    title="Audio Tracks (A)"
+                    aria-label="Audio Tracks"
+                  >
+                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                    </svg>
+                  </button>
 
-                    {/* Tab 1: Tracks List */}
-                    {subTab === 'tracks' ? (
-                      <div className="max-h-64 overflow-y-auto py-1 divide-y divide-white/5">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectSubtitle('off')}
-                          className={`w-full flex items-center justify-between px-4 py-2 text-xs transition-colors cursor-pointer ${
-                            selectedSubId === 'off'
-                              ? 'bg-white/15 text-white font-bold'
-                              : 'text-white/70 hover:text-white hover:bg-white/10'
-                          }`}
-                        >
-                          <span>Off</span>
-                          {selectedSubId === 'off' && <span className="text-white">✓</span>}
-                        </button>
-
-                        {subtitlesList.map((sub) => {
-                          const isSelected = selectedSubId === sub.id
-                          const langName = LANGUAGE_LABELS[sub.lang] || sub.lang.toUpperCase()
-                          const tag = sub.releaseGroup || (sub.subtitleFileName?.includes('SDH') ? 'SDH' : '')
-
+                  {audioMenuOpen && (
+                    <div className="absolute right-0 bottom-14 w-72 max-h-64 overflow-y-auto bg-[#161618]/95 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-2xl p-2 z-50 text-white animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-2 border-b border-white/10 text-xs font-bold text-white/60 uppercase tracking-wider flex items-center justify-between">
+                        <span>Audio Tracks</span>
+                        <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded-full">{audioTracks.length}</span>
+                      </div>
+                      <div className="py-1 divide-y divide-white/5">
+                        {audioTracks.map((trk) => {
+                          const isSelected = trk.selected || trk.id === selectedAudioTrack
                           return (
                             <button
-                              key={sub.id}
+                              key={trk.id}
                               type="button"
-                              onClick={() => handleSelectSubtitle(sub)}
-                              className={`w-full flex items-center justify-between px-4 py-2.5 text-xs transition-colors cursor-pointer text-left ${
-                                isSelected
-                                  ? 'bg-white/15 text-white font-bold'
-                                  : 'text-white/70 hover:text-white hover:bg-white/10'
+                              onClick={() => {
+                                handleSelectAudioTrack(trk.id)
+                                setAudioMenuOpen(false)
+                              }}
+                              className={`w-full flex items-center justify-between px-3 py-2.5 text-xs rounded-xl transition-colors cursor-pointer text-left ${
+                                isSelected ? 'bg-white/15 text-white font-bold' : 'text-white/70 hover:bg-white/10'
                               }`}
                             >
                               <div className="truncate pr-2">
-                                <span className="font-semibold">{langName}</span>
-                                {tag && (
-                                  <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60 font-mono">
-                                    {tag}
+                                <span className="font-semibold">{trk.label}</span>
+                                {trk.language && trk.language !== 'und' && (
+                                  <span className="ml-2 text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-white/10 text-white/60">
+                                    {trk.language}
                                   </span>
                                 )}
                               </div>
-                              {isSelected && <span className="text-white shrink-0 font-bold">✓</span>}
+                              {isSelected && <span className="text-white font-bold shrink-0">✓</span>}
                             </button>
                           )
                         })}
                       </div>
-                    ) : (
-                      /* Tab 2: Subtitle Styling & Sync Adjustment */
-                      <div className="p-4 space-y-3.5 text-xs">
-                        {/* Font Size */}
-                        <div>
-                          <p className="text-[11px] text-white/50 mb-1.5 font-medium">Text Size</p>
-                          <div className="grid grid-cols-4 gap-1.5">
-                            {(['sm', 'md', 'lg', 'xl'] as const).map((sz) => (
+                    </div>
+                  )}
+                </div>
+
+                {/* Subtitles & Styling Popover Menu (CC) */}
+                <div className="relative" ref={subtitleDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setSubtitleMenuOpen(!subtitleMenuOpen)}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                      selectedSubId !== 'off'
+                        ? 'bg-white text-black font-bold shadow-lg'
+                        : 'bg-white/10 hover:bg-white/20 text-white'
+                    }`}
+                    title="Subtitles & Styling (C)"
+                    aria-label="Subtitles"
+                    aria-expanded={subtitleMenuOpen}
+                  >
+                    <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                      <path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z" />
+                    </svg>
+                  </button>
+
+                  {subtitleMenuOpen && (
+                    <div className="absolute right-0 bottom-14 w-80 max-h-96 overflow-y-auto bg-[#161618]/95 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150 text-white">
+                      {/* Subtitle Tabs Header */}
+                      <div className="flex items-center border-b border-white/10 bg-white/[0.02]">
+                        <button
+                          type="button"
+                          onClick={() => setSubTab('tracks')}
+                          className={`flex-1 py-2.5 text-xs font-semibold text-center transition-colors cursor-pointer ${
+                            subTab === 'tracks'
+                              ? 'text-white border-b-2 border-white font-bold bg-white/5'
+                              : 'text-white/50 hover:text-white'
+                          }`}
+                        >
+                          Subtitles ({subtitlesList.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSubTab('style')}
+                          className={`flex-1 py-2.5 text-xs font-semibold text-center transition-colors cursor-pointer ${
+                            subTab === 'style'
+                              ? 'text-white border-b-2 border-white font-bold bg-white/5'
+                              : 'text-white/50 hover:text-white'
+                          }`}
+                        >
+                          Styling & Sync
+                        </button>
+                      </div>
+
+                      {/* Tab 1: Tracks List */}
+                      {subTab === 'tracks' ? (
+                        <div className="max-h-64 overflow-y-auto py-1 divide-y divide-white/5">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSubtitle('off')}
+                            className={`w-full flex items-center justify-between px-4 py-2 text-xs transition-colors cursor-pointer ${
+                              selectedSubId === 'off'
+                                ? 'bg-white/15 text-white font-bold'
+                                : 'text-white/70 hover:text-white hover:bg-white/10'
+                            }`}
+                          >
+                            <span>Off</span>
+                            {selectedSubId === 'off' && <span className="text-white">✓</span>}
+                          </button>
+
+                          {subtitlesList.map((sub) => {
+                            const isSelected = selectedSubId === sub.id
+                            const langName = LANGUAGE_LABELS[sub.lang] || sub.lang.toUpperCase()
+                            const tag = sub.releaseGroup || (sub.subtitleFileName?.includes('SDH') ? 'SDH' : '')
+
+                            return (
                               <button
-                                key={sz}
+                                key={sub.id}
                                 type="button"
-                                onClick={() => setSubFontSize(sz)}
-                                className={`py-1 rounded-xl font-bold uppercase transition-all cursor-pointer ${
-                                  subFontSize === sz
-                                    ? 'bg-white text-black'
+                                onClick={() => handleSelectSubtitle(sub)}
+                                className={`w-full flex items-center justify-between px-4 py-2.5 text-xs transition-colors cursor-pointer text-left ${
+                                  isSelected
+                                    ? 'bg-white/15 text-white font-bold'
+                                    : 'text-white/70 hover:text-white hover:bg-white/10'
+                                }`}
+                              >
+                                <div className="truncate pr-2">
+                                  <span className="font-semibold">{langName}</span>
+                                  {tag && (
+                                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60 font-mono">
+                                      {tag}
+                                    </span>
+                                  )}
+                                </div>
+                                {isSelected && <span className="text-white shrink-0 font-bold">✓</span>}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        /* Tab 2: Subtitle Styling & Sync Adjustment */
+                        <div className="p-4 space-y-3.5 text-xs">
+                          {/* Font Size */}
+                          <div>
+                            <p className="text-[11px] text-white/50 mb-1.5 font-medium">Text Size</p>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {(['sm', 'md', 'lg', 'xl'] as const).map((sz) => (
+                                <button
+                                  key={sz}
+                                  type="button"
+                                  onClick={() => setSubFontSize(sz)}
+                                  className={`py-1 rounded-xl font-bold uppercase transition-all cursor-pointer ${
+                                    subFontSize === sz
+                                      ? 'bg-white text-black'
+                                      : 'bg-white/5 hover:bg-white/10 text-white/70 border border-white/10'
+                                  }`}
+                                >
+                                  {sz}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Text Color */}
+                          <div>
+                            <p className="text-[11px] text-white/50 mb-1.5 font-medium">Text Color</p>
+                            <div className="flex items-center gap-2">
+                              {[
+                                { id: 'white', bg: 'bg-white' },
+                                { id: 'yellow', bg: 'bg-yellow-400' },
+                                { id: 'cyan', bg: 'bg-sky-400' },
+                                { id: 'green', bg: 'bg-emerald-400' },
+                              ].map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => setSubColor(c.id as any)}
+                                  className={`w-7 h-7 rounded-full ${c.bg} transition-all cursor-pointer flex items-center justify-center ${
+                                    subColor === c.id ? 'ring-2 ring-white ring-offset-2 ring-offset-black scale-110' : 'opacity-80 hover:opacity-100'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Box Style */}
+                          <div>
+                            <p className="text-[11px] text-white/50 mb-1.5 font-medium">Backdrop Style</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setSubBoxStyle('box')}
+                                className={`py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                  subBoxStyle === 'box'
+                                    ? 'bg-white text-black font-bold'
                                     : 'bg-white/5 hover:bg-white/10 text-white/70 border border-white/10'
                                 }`}
                               >
-                                {sz}
+                                Translucent Box
                               </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Text Color */}
-                        <div>
-                          <p className="text-[11px] text-white/50 mb-1.5 font-medium">Text Color</p>
-                          <div className="flex items-center gap-2">
-                            {[
-                              { id: 'white', bg: 'bg-white' },
-                              { id: 'yellow', bg: 'bg-yellow-400' },
-                              { id: 'cyan', bg: 'bg-sky-400' },
-                              { id: 'green', bg: 'bg-emerald-400' },
-                            ].map((c) => (
                               <button
-                                key={c.id}
                                 type="button"
-                                onClick={() => setSubColor(c.id as any)}
-                                className={`w-7 h-7 rounded-full ${c.bg} transition-all cursor-pointer flex items-center justify-center ${
-                                  subColor === c.id ? 'ring-2 ring-white ring-offset-2 ring-offset-black scale-110' : 'opacity-80 hover:opacity-100'
+                                onClick={() => setSubBoxStyle('glow')}
+                                className={`py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                  subBoxStyle === 'glow'
+                                    ? 'bg-white text-black font-bold'
+                                    : 'bg-white/5 hover:bg-white/10 text-white/70 border border-white/10'
                                 }`}
-                              />
-                            ))}
+                              >
+                                Text Shadow Only
+                              </button>
+                            </div>
                           </div>
-                        </div>
 
-                        {/* Box Style */}
-                        <div>
-                          <p className="text-[11px] text-white/50 mb-1.5 font-medium">Backdrop Style</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setSubBoxStyle('box')}
-                              className={`py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                                subBoxStyle === 'box'
-                                  ? 'bg-white text-black font-bold'
-                                  : 'bg-white/5 hover:bg-white/10 text-white/70 border border-white/10'
-                              }`}
-                            >
-                              Translucent Box
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setSubBoxStyle('glow')}
-                              className={`py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                                subBoxStyle === 'glow'
-                                  ? 'bg-white text-black font-bold'
-                                  : 'bg-white/5 hover:bg-white/10 text-white/70 border border-white/10'
-                              }`}
-                            >
-                              Text Shadow Only
-                            </button>
+                          {/* Timing Offset Sync */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <p className="text-[11px] text-white/50 font-medium">Audio Sync Offset</p>
+                              <span className="font-mono text-white/80 font-bold">
+                                {subOffset > 0 ? `+${subOffset.toFixed(1)}s` : `${subOffset.toFixed(1)}s`}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setSubOffset((o) => parseFloat((o - 0.5).toFixed(1)))}
+                                className="flex-1 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all cursor-pointer"
+                              >
+                                -0.5s
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSubOffset(0)}
+                                className="px-3 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 text-xs font-medium transition-all cursor-pointer"
+                              >
+                                Reset
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSubOffset((o) => parseFloat((o + 0.5).toFixed(1)))}
+                                className="flex-1 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all cursor-pointer"
+                              >
+                                +0.5s
+                              </button>
+                            </div>
                           </div>
                         </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-                        {/* Timing Offset Sync */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <p className="text-[11px] text-white/50 font-medium">Audio Sync Offset</p>
-                            <span className="font-mono text-white/80 font-bold">
-                              {subOffset > 0 ? `+${subOffset.toFixed(1)}s` : `${subOffset.toFixed(1)}s`}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setSubOffset((o) => parseFloat((o - 0.5).toFixed(1)))}
-                              className="flex-1 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all cursor-pointer"
-                            >
-                              -0.5s
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setSubOffset(0)}
-                              className="px-3 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 text-xs font-medium transition-all cursor-pointer"
-                            >
-                              Reset
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setSubOffset((o) => parseFloat((o + 0.5).toFixed(1)))}
-                              className="flex-1 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all cursor-pointer"
-                            >
-                              +0.5s
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Rotate Screen Button (Desktop/Tablet) */}
+                <button
+                  type="button"
+                  onClick={toggleOrientation}
+                  className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all hover:scale-105 cursor-pointer"
+                  title="Rotate Screen (R)"
+                  aria-label="Rotate Screen"
+                >
+                  <svg className="w-4 h-4 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
+                    <path d="M4 12a8 8 0 0 1 14.93-4M20 12a8 8 0 0 1-14.93 4" />
+                    <polyline points="20 4 20 8 16 8" />
+                    <polyline points="4 20 4 16 8 16" />
+                  </svg>
+                </button>
+
+                {/* Fullscreen Button */}
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all hover:scale-105 cursor-pointer"
+                  title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+                  aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                >
+                  {isFullscreen ? (
+                    <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                      <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                      <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                    </svg>
+                  )}
+                </button>
               </div>
 
-              {/* Fullscreen Button */}
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className="w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all hover:scale-105 cursor-pointer"
-                title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
-                aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-              >
-                {isFullscreen ? (
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 24 24">
-                    <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
+              {/* MOBILE ONLY: Quick Rotate & Sleek 3-Dot Options Capsule */}
+              <div className="sm:hidden flex items-center gap-1.5">
+                {/* Rotate Screen Button (Mobile) */}
+                <button
+                  type="button"
+                  onClick={toggleOrientation}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer"
+                  title="Rotate Screen"
+                  aria-label="Rotate Screen"
+                >
+                  <svg className="w-4 h-4 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
+                    <path d="M4 12a8 8 0 0 1 14.93-4M20 12a8 8 0 0 1-14.93 4" />
+                    <polyline points="20 4 20 8 16 8" />
+                    <polyline points="4 20 4 16 8 16" />
                   </svg>
-                ) : (
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 24 24">
-                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                </button>
+
+                {/* 3-Dot Menu Button (Mobile) */}
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(true)}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-95 cursor-pointer ${
+                    mobileMenuOpen
+                      ? 'bg-white text-black font-bold shadow-lg'
+                      : 'bg-white/10 hover:bg-white/20 text-white'
+                  }`}
+                  title="Playback Options"
+                  aria-label="Playback Options"
+                  aria-expanded={mobileMenuOpen}
+                >
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <circle cx="5" cy="12" r="2" />
+                    <circle cx="12" cy="12" r="2" />
+                    <circle cx="19" cy="12" r="2" />
                   </svg>
-                )}
-              </button>
+                </button>
+              </div>
             </div>
           </nav>
         </div>
       </div>
+
+      {/* MOBILE 3-DOT PLAYBACK SHEET: Beautifully organized Audio Tracks, Subtitles, Streams & Rotation */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex justify-end items-end sm:hidden animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setMobileMenuOpen(false)
+          }}
+        >
+          <div className="relative w-full max-h-[82vh] bg-[#141416]/98 backdrop-blur-3xl border-t border-white/20 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.9)] flex flex-col text-white animate-in slide-in-from-bottom duration-300">
+            {/* Notch */}
+            <div className="pt-3 pb-1 flex justify-center">
+              <div className="w-10 h-1 bg-white/25 rounded-full" />
+            </div>
+
+            {/* Header */}
+            <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white tracking-wide">Playback Options</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-xs font-bold"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Segmented Control Tabs */}
+            <div className="flex items-center border-b border-white/10 bg-white/[0.03] p-1.5 gap-1 mx-4 my-2.5 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setMobileTab('audio')}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+                  mobileTab === 'audio' ? 'bg-white text-black shadow-md' : 'text-white/60 hover:text-white'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                </svg>
+                <span>Audio ({audioTracks.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMobileTab('subtitles')}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+                  mobileTab === 'subtitles' ? 'bg-white text-black shadow-md' : 'text-white/60 hover:text-white'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                  <path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z" />
+                </svg>
+                <span>Subtitles</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMobileTab('streams')}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+                  mobileTab === 'streams' ? 'bg-white text-black shadow-md' : 'text-white/60 hover:text-white'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
+                  <path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16" />
+                  <circle cx="5" cy="19" r="1" />
+                </svg>
+                <span>Streams ({sources.length})</span>
+              </button>
+            </div>
+
+            {/* Tab Body */}
+            <div className="flex-1 overflow-y-auto px-4 py-2">
+              {/* Tab 1: Audio Tracks */}
+              {mobileTab === 'audio' && (
+                <div className="space-y-1 divide-y divide-white/5">
+                  {audioTracks.map((trk) => {
+                    const isSelected = trk.selected || trk.id === selectedAudioTrack
+                    return (
+                      <button
+                        key={trk.id}
+                        type="button"
+                        onClick={() => handleSelectAudioTrack(trk.id)}
+                        className={`w-full flex items-center justify-between p-3 rounded-2xl text-left transition-all ${
+                          isSelected ? 'bg-white/15 text-white font-bold' : 'text-white/70 hover:bg-white/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/80">
+                            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold">{trk.label}</p>
+                            {trk.language && (
+                              <p className="text-[10px] text-white/50 uppercase font-mono">{trk.language}</p>
+                            )}
+                          </div>
+                        </div>
+                        {isSelected && <span className="text-white font-bold text-sm">✓</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Tab 2: Subtitles */}
+              {mobileTab === 'subtitles' && (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSubtitle('off')}
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl text-left transition-all ${
+                      selectedSubId === 'off' ? 'bg-white/15 text-white font-bold' : 'text-white/70 hover:bg-white/5'
+                    }`}
+                  >
+                    <span className="text-xs font-semibold">Subtitles Off</span>
+                    {selectedSubId === 'off' && <span className="text-white font-bold">✓</span>}
+                  </button>
+
+                  <div className="divide-y divide-white/5">
+                    {subtitlesList.map((sub) => {
+                      const isSelected = selectedSubId === sub.id
+                      const langName = LANGUAGE_LABELS[sub.lang] || sub.lang.toUpperCase()
+                      const tag = sub.releaseGroup || (sub.subtitleFileName?.includes('SDH') ? 'SDH' : '')
+
+                      return (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => handleSelectSubtitle(sub)}
+                          className={`w-full flex items-center justify-between p-3 rounded-2xl text-left transition-all ${
+                            isSelected ? 'bg-white/15 text-white font-bold' : 'text-white/70 hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="truncate pr-2">
+                            <span className="text-xs font-semibold">{langName}</span>
+                            {tag && (
+                              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60 font-mono">
+                                {tag}
+                              </span>
+                            )}
+                          </div>
+                          {isSelected && <span className="text-white font-bold text-sm shrink-0">✓</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: Streams */}
+              {mobileTab === 'streams' && (
+                <div className="space-y-2">
+                  {filteredSources.map((src, idx) => {
+                    const info = parseStreamClean(src, title)
+                    const realIndex = sources.indexOf(src)
+                    const isSelected = realIndex >= 0 ? realIndex === sourceIndex : idx === sourceIndex
+
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          setSourceIndex(realIndex >= 0 ? realIndex : idx)
+                          setPlaybackError(null)
+                          setMobileMenuOpen(false)
+                        }}
+                        className={`flex items-center justify-between p-3 rounded-2xl transition-all cursor-pointer border ${
+                          isSelected
+                            ? 'bg-white/[0.14] border-white/40 shadow-lg'
+                            : 'bg-white/[0.03] hover:bg-white/[0.07] border-white/10'
+                        }`}
+                      >
+                        <div className="space-y-1 pr-2 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                                info.resolution.includes('4K')
+                                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                  : 'bg-white/15 text-white/90 border border-white/20'
+                              }`}
+                            >
+                              {formatStreamPill(info.resolution, info.seeders)}
+                            </span>
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-white/10 text-white/70">
+                              {info.quality}
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-white/90 leading-snug break-words whitespace-normal py-0.5">
+                            {info.cleanTitle}
+                          </p>
+                        </div>
+                        <div className="shrink-0">
+                          {isSelected ? (
+                            <span className="px-2.5 py-1 rounded-full bg-white text-black text-[10px] font-bold">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="w-7 h-7 rounded-full bg-white/10 text-white/80 flex items-center justify-center text-xs">
+                              ▶
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Quick Rotate to Horizontal View Button */}
+            <div className="p-3 border-t border-white/10 bg-black/40">
+              <button
+                type="button"
+                onClick={() => {
+                  toggleOrientation()
+                  setMobileMenuOpen(false)
+                }}
+                className="w-full py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-98 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <svg className="w-4 h-4 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
+                  <path d="M4 12a8 8 0 0 1 14.93-4M20 12a8 8 0 0 1-14.93 4" />
+                  <polyline points="20 4 20 8 16 8" />
+                  <polyline points="4 20 4 16 8 16" />
+                </svg>
+                <span>{isLandscape ? 'Switch to Vertical View' : 'Rotate to Horizontal View'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MINIMALIST LIVING CREATURE TORRENT PANEL (No Messy Description, Responsive Mobile Bottom Sheet / Desktop Drawer) */}
       {drawerOpen && (

@@ -1,6 +1,5 @@
 import type { ContentProvider } from '@/types';
 import { TmdbProvider } from './providers/TmdbProvider';
-import { LegalVideoProvider } from './providers/LegalVideoProvider';
 import { AddonProvider } from './providers/AddonProvider';
 
 const ADDON_STORAGE_KEY = 'endless_stream:addon_urls';
@@ -46,10 +45,7 @@ export function initProviders(): void {
   // Clear existing
   providers.length = 0;
 
-  // 1. Legal video library (Local curated showcases: Sandman, Silo, Sintel, etc.)
-  registerProvider(new LegalVideoProvider());
-
-  // 2. TMDB — if API key configured
+  // 1. TMDB — if API key configured
   const tmdbKey = import.meta.env.VITE_TMDB_KEY;
   if (tmdbKey) {
     registerProvider(new TmdbProvider());

@@ -4,12 +4,12 @@ import { useSearch } from '@/data'
 import { Grid } from '@/ui/Grid'
 
 const POPULAR_SEARCHES = [
-  'The Sandman',
-  'Silo',
+  'Dune',
+  'Interstellar',
   'Sci-Fi',
   'Fantasy',
   'Animation',
-  'Big Buck Bunny',
+  'Action',
 ]
 
 export function Search() {

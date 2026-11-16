@@ -65,7 +65,7 @@ export function Home() {
             <h2 className="text-white text-base sm:text-xl font-bold tracking-tight mb-3 sm:mb-4">
               Continue Watching
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-5">
+            <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-5">
               {progressList.map((p) => {
                 const item: MediaItem = {
                   id: p.mediaId,

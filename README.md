@@ -94,10 +94,15 @@ flowchart LR
 ### Living Creature Design System
 - Apple TV+ Inspired Glassmorphism: Multi-layered background blurs, frosted capsules, dynamic ambient hero lighting, and fluid physics.
 - Responsive Cross-Platform Navigation: Smooth adaptive layouts across 4K Desktop monitors, laptops, tablets, and handheld mobile viewports.
+- Authentic Portrait Movie Posters: Handheld mobile views present authentic 2:3 vertical posters with transparent title branding logos, eliminating cluttered synopsis blocks and horizontal distortion.
 - Living Dynamic Hero Banner: Rotates featured content automatically every 4 hours, presenting clean cinema artwork with zero watermark artifacts.
-- Pixar/Disney 3D Animated Avatars: Custom 3D character avatars for user profiles (Lion, Fox, Wolf, Leopard, Owl, Panther).
+- Solid Background 2D Animal Portrait Illustrations: Custom regal 2D graphic portraits for user profiles (Lion, Fox, Wolf, Snow Leopard, Barn Owl, Black Panther) on flat solid background colors.
 
 ### Precision Video Player Engine
+- Media3 ExoPlayer Android Backend: Native Android APK utilizes Google's lightweight open-source ExoPlayer under a transparent WebView for hardware-accelerated torrent playback, AC3/EAC3/DTS audio decoding, and instant seeking without altering UI/UX.
+- Multi-Audio Track Selection: Battle-tested audio track switching supporting multi-channel surround sound (5.1, 7.1), language variants, and commentary tracks on both Android and Desktop.
+- Mobile 3-Dot Options Capsule: Eliminates mobile viewport crowding by consolidating Audio Tracks, OpenSubtitles, and Stream Selection into a sleek Apple TV+ bottom sheet.
+- Dynamic Screen Rotation: Integrated horizontal landscape rotation allows one-tap full-width cinema playback on handheld Android devices and tablets.
 - Universal Seeking Architecture: Native HTTP 206 Partial Content range seeking combined with intelligent pre-buffering.
 - Dynamic Duration Synchronization: Overcomes variable episode duration mismatches by binding directly to media duration upon container header resolution.
 - Fluid Scrub Scrubber: Real-time dragging feedback without socket saturation or FFmpeg stalls.

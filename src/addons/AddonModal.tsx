@@ -261,14 +261,14 @@ export function AddonModal() {
           </div>
 
           {/* Custom Installed Addons (if user installed other URLs) */}
-          {installedAddons.filter((a) => !PRESET_ADDONS.some((p) => isUrlInstalled(p.url))).length > 0 && (
+          {installedAddons.filter((a) => !PRESET_ADDONS.some((p) => p.url === a.url)).length > 0 && (
             <div className="mt-5 space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40 mb-2">
                 Custom Installed
               </p>
               <div className="divide-y divide-white/5 rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden">
                 {installedAddons
-                  .filter((a) => !PRESET_ADDONS.some((p) => isUrlInstalled(p.url)))
+                  .filter((a) => !PRESET_ADDONS.some((p) => p.url === a.url))
                   .map((addon) => (
                     <div
                       key={addon.url}

@@ -49,9 +49,9 @@ export function Row({ title, items, loading }: RowProps) {
         <h2 className="text-white text-lg sm:text-xl font-bold tracking-tight mb-4">
           {title}
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="aspect-video rounded-xl bg-white/10 animate-pulse" />
+            <div key={i} className="aspect-[2/3] sm:aspect-video rounded-xl bg-white/10 animate-pulse" />
           ))}
         </div>
       </div>
@@ -88,7 +88,7 @@ export function Row({ title, items, loading }: RowProps) {
           {items.map((item) => (
             <div
               key={item.id}
-              className="flex-shrink-0 w-[190px] sm:w-[240px] md:w-[260px] lg:w-[calc((100%-100px)/6)] min-w-[160px] snap-start"
+              className="flex-shrink-0 w-[125px] sm:w-[240px] md:w-[260px] lg:w-[calc((100%-100px)/6)] min-w-[110px] snap-start"
             >
               <PosterCard item={item} />
             </div>
