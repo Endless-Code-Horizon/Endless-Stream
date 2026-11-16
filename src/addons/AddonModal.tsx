@@ -4,6 +4,7 @@ import {
   getSavedAddonUrls,
   addAddon,
   removeAddon,
+  clearAllAddons,
   initProviders,
 } from '@/data'
 import type { AddonManifest } from '@/types'
@@ -122,6 +123,13 @@ export function AddonModal() {
     loadInstalled()
   }
 
+  const handleClearAll = () => {
+    clearAllAddons()
+    initProviders()
+    loadInstalled()
+    setFeedback({ text: 'All add-ons cleared (Zero state)' })
+  }
+
   const isUrlInstalled = (url: string) => {
     const cleanTarget = url.replace(/\/manifest\.json$/i, '').replace(/\/+$/, '').toLowerCase()
     return installedAddons.some((a) => {
@@ -145,13 +153,23 @@ export function AddonModal() {
         <div className="relative w-full bg-[#181818]/95 backdrop-blur-3xl text-white rounded-3xl overflow-hidden shadow-[0_30px_90px_rgba(0,0,0,0.95),0_0_40px_rgba(255,255,255,0.06)] border border-white/20 p-6 sm:p-8 select-none">
           {/* Header */}
           <div className="flex items-center justify-between pb-5 border-b border-white/10">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 sm:gap-3">
               <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
                 Addons
               </h2>
               <span className="text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-white/10 text-white/70 border border-white/15">
                 {installedAddons.length} Active
               </span>
+              {installedAddons.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  className="text-[11px] font-semibold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-2.5 py-0.5 rounded-full border border-red-500/25 transition-all cursor-pointer active:scale-95"
+                  title="Remove all addons and reset to zero"
+                >
+                  Clear All
+                </button>
+              )}
             </div>
 
             <button
@@ -237,7 +255,7 @@ export function AddonModal() {
                           <button
                             type="button"
                             onClick={() => handleRemove(preset.url)}
-                            className="text-[11px] text-white/40 hover:text-red-400 px-2 py-1 rounded-lg transition-colors cursor-pointer opacity-0 group-hover/row:opacity-100"
+                            className="text-[11px] text-white/50 hover:text-red-400 hover:bg-white/10 px-2 py-1 rounded-lg transition-colors cursor-pointer"
                             title="Remove addon"
                           >
                             Remove

@@ -4,15 +4,12 @@ import { AddonProvider } from './providers/AddonProvider';
 
 const ADDON_STORAGE_KEY = 'endless_stream:addon_urls';
 
-// Default official ethical and legal addons enabled out of the box (Free open metadata & subtitles)
-// Stream and scrape addons are never pre-bundled; users have complete freedom to install community addons via the Addon Manager.
-export const DEFAULT_ADDON_URLS = [
-  'https://v3-cinemeta.strem.io', // Official Cinemeta (Movies & TV Shows catalogs, metadata & search)
-  'https://opensubtitles-v3.strem.io', // Official OpenSubtitles v3 (Subtitles)
-  'https://watchhub.strem.io', // Official WatchHub (Legal streaming availability)
-];
+// Default addons enabled out of the box (Pure Emptiness: 0 addons by default).
+// The client hosts zero scrapers and zero catalogs out of the box; users have complete freedom to add or remove any addons.
+export const DEFAULT_ADDON_URLS: string[] = [];
 
 const providers: ContentProvider[] = [];
+let initialized = false;
 
 function registerProvider(provider: ContentProvider): void {
   if (!providers.find((p) => p.id === provider.id)) {
@@ -23,15 +20,15 @@ function registerProvider(provider: ContentProvider): void {
 export function getSavedAddonUrls(): string[] {
   try {
     const raw = localStorage.getItem(ADDON_STORAGE_KEY);
-    if (!raw) {
-      // First run: save defaults
+    if (raw === null) {
+      // First run: save empty default slate
       localStorage.setItem(ADDON_STORAGE_KEY, JSON.stringify(DEFAULT_ADDON_URLS));
       return [...DEFAULT_ADDON_URLS];
     }
-    const parsed = JSON.parse(raw) as string[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [...DEFAULT_ADDON_URLS];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return [...DEFAULT_ADDON_URLS];
+    return [];
   }
 }
 
@@ -43,9 +40,15 @@ export function saveAddonUrls(urls: string[]): void {
   }
 }
 
+export function clearAllAddons(): void {
+  providers.length = 0;
+  saveAddonUrls([]);
+}
+
 export function initProviders(): void {
   // Clear existing
   providers.length = 0;
+  initialized = true;
 
   // 1. TMDB — if API key configured
   const tmdbKey = import.meta.env.VITE_TMDB_KEY;
@@ -53,7 +56,7 @@ export function initProviders(): void {
     registerProvider(new TmdbProvider());
   }
 
-  // 3. Stremio Addons (Official open catalogs + User installed community addons)
+  // 2. Stremio Addons (User installed community addons)
   const addonUrls = getSavedAddonUrls();
   for (const url of addonUrls) {
     const addon = new AddonProvider(url);
@@ -95,7 +98,7 @@ export function removeAddon(url: string): void {
 }
 
 export function getProviders(): ContentProvider[] {
-  if (providers.length === 0) {
+  if (!initialized) {
     initProviders();
   }
   return providers;

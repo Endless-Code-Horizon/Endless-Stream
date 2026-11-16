@@ -20,7 +20,7 @@ Endless Stream is a high-performance open-source streaming ecosystem engineered 
 
 Built upon an unbundled, zero-cost freedom architecture, Endless Stream functions identically to Stremio: the application hosts, bundles, and maintains zero stream scrapers, torrent indexes, or third-party media hosts out of the box. Instead, Endless Stream provides pure, open technology. Users are equipped with an open Addon Engine compatible with standard Stremio v3 manifests, allowing total sovereignty to install community add-ons (such as Anime Kitsu, CyberFlix, or custom manifests) directly from the visual Addon Manager.
 
-Out of the box, the system connects strictly to official free metadata catalogs (such as Cinemeta) and curated public-domain showcase media, ensuring legal compliance, zero subscription requirements, and absolute user freedom.
+Out of the box, the system starts as a clean slate (0 pre-bundled add-ons) and connects to zero external services until configured by the user, ensuring legal compliance, zero subscription requirements, and absolute user freedom. Users can install official or community manifests with a single tap in the Addon Manager, or clear all add-ons back to zero at any time.
 
 ---
 

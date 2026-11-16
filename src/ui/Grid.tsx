@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { MediaItem } from '@/types'
 import { PosterCard } from './PosterCard'
+import { useUIStore } from '@/app/uiStore'
 
 interface GridProps {
   items: MediaItem[]
@@ -29,8 +30,24 @@ export function Grid({ items, loading, itemsPerPage = 60 }: GridProps) {
 
   if (items.length === 0) {
     return (
-      <div className="text-center py-24 text-white/40">
-        <p className="text-base font-medium">No titles available.</p>
+      <div className="flex flex-col items-center justify-center py-20 px-4 text-center select-none animate-in fade-in duration-300">
+        <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-4 text-white/50 shadow-inner">
+          <svg className="w-7 h-7 stroke-current stroke-1.5 fill-none" viewBox="0 0 24 24">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          </svg>
+        </div>
+        <p className="text-lg font-semibold text-white/90 mb-1">Total Freedom: Clean Slate</p>
+        <p className="text-xs sm:text-sm text-white/50 max-w-md mb-6 leading-relaxed">
+          No add-ons or scrapers are pre-bundled. Install any Stremio catalog or community streaming add-on to populate your library.
+        </p>
+        <button
+          type="button"
+          onClick={() => useUIStore.getState().openAddonModal()}
+          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white text-black font-semibold text-xs sm:text-sm hover:scale-105 active:scale-95 transition-all shadow-lg shadow-white/10 cursor-pointer"
+        >
+          <span>Open Addon Manager</span>
+          <span>→</span>
+        </button>
       </div>
     )
   }

@@ -16,6 +16,7 @@ export {
   initProviders,
   addAddon,
   removeAddon,
+  clearAllAddons,
   getProviders,
   getAddonProviders,
   getSavedAddonUrls,
