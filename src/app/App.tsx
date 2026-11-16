@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { Layout } from './Layout'
 import { ProfileGate } from '../profiles/ProfileGate'
@@ -9,7 +9,6 @@ const Movies = lazy(() => import('../pages/Movies').then(m => ({ default: m.Movi
 const Shows = lazy(() => import('../pages/Shows').then(m => ({ default: m.Shows })))
 const Search = lazy(() => import('../pages/Search').then(m => ({ default: m.Search })))
 const MyList = lazy(() => import('../pages/MyList').then(m => ({ default: m.MyList })))
-const Player = lazy(() => import('../player/PlayerPage').then(m => ({ default: m.PlayerPage })))
 
 function PageFallback() {
   return (
@@ -41,9 +40,7 @@ export function App() {
               <Suspense fallback={<PageFallback />}><MyList /></Suspense>
             } />
           </Route>
-          <Route path="/play/:type/:id" element={
-            <Suspense fallback={<PageFallback />}><Player /></Suspense>
-          } />
+          <Route path="/play/:type/:id" element={<Navigate to="/" replace />} />
         </Routes>
       </ProfileGate>
     </BrowserRouter>

@@ -1,290 +1,158 @@
 # Endless Stream
 
 <p align="center">
-  <img src="Assets/endless-stream-icon.svg" width="128" height="128" alt="Endless Stream Logo" />
+  <img src="Assets/endless-stream-icon.svg" width="112" height="112" alt="Endless Stream Logo" />
 </p>
 
 <p align="center">
-  <strong>Next-Generation Open Streaming Platform with Living Glassmorphism Architecture</strong>
-</p>
-
-<p align="center">
-  Zero Subscription Cost &bull; Sovereign Stremio Freedom Model &bull; Native BitTorrent P2P Engine &bull; Dual Desktop & Android Runtime
+  <strong>Apple TV+ Glassmorphism UI/UX Showcase Shell</strong><br/>
+  An open-source, cinematic streaming interface shell inspired by Stremio's modular architecture.
 </p>
 
 ---
 
-> [!NOTE]
-> **Project Status (Paused / Future Roadmap)**  
-> As of Release V1.0, active development on Endless Stream is paused for future review. This document serves as the comprehensive architectural blueprint, detailing the implemented frontend, native desktop/mobile engines, data flow pipelines, and technical trade-offs.
+## 1. Overview
+
+**Endless Stream** is a frontend UI/UX showcase shell engineered with React 19, Tailwind CSS v4, and Zustand. It demonstrates an Apple TV+ aesthetic featuring fluid glassmorphism, dynamic backdrop lighting, living capsule navigation, personalized multi-profile avatars, and modular add-on management.
+
+In showcase mode, the client functions exclusively as an ethical metadata browser connected to public **Cinemeta** endpoints (`v3-cinemeta.strem.io`). All video playback engines, P2P torrent streaming modules, and native platform wrappers have been safely archived under `_hold/` to preserve a clean, legal web-only footprint.
 
 ---
 
-## 1. System Architecture Overview
+## 2. System Architecture
 
-Endless Stream is organized into five decoupled layers spanning the presentation layer, sovereign state, protocol dispatch, desktop embedded streaming engine, and the native Android Media3 ExoPlayer bridge.
-
-```mermaid
-flowchart TD
-    subgraph Presentation["1. Presentation & UI Layer"]
-        LivingUI["Apple TV+ Living Glassmorphic UI<br/>(React 18 + Tailwind CSS)"]
-        Nav["Living Capsule Navigation<br/>(Top Desktop Centered / Bottom Mobile)"]
-        Modals["Details Modal & Addon Manager"]
-        PlayerUI["Living Player Controls & HUD<br/>(Scrubber, Audio Tracks, OpenSubtitles)"]
-    end
-
-    subgraph State["2. Sovereign State Core"]
-        Profiles["ProfileStore (Zustand)<br/>(Avatars, Active User)"]
-        Watchlist["WatchlistStore (Zustand)<br/>(Per-Profile My List)"]
-        Progress["ProgressStore (Zustand)<br/>(Resume Position, Purge on 90%)"]
-        UIState["UIStore (Zustand)<br/>(Modals, Addon Triggers)"]
-    end
-
-    subgraph Protocol["3. Protocol & Provider Registry"]
-        Registry["Provider Registry (providerRegistry.ts)"]
-        Cinemeta["Cinemeta Provider (Metadata/Catalogs)"]
-        Addons["AddonProvider (Stremio v3 Manifests)"]
-        Proxy["Local Proxy (/addon-proxy, /subtitles-proxy)"]
-    end
-
-    subgraph DesktopRuntime["4. Desktop Streaming Runtime (Electron)"]
-        Elec["Electron 45 Main Process (main.cjs)"]
-        EmbServer["Embedded HTTP Server (127.0.0.1:5173)"]
-        P2P["torrent-stream Swarm Engine"]
-        FFmpeg["FFmpeg Disk-Buffered Transmuxer"]
-        DiskCache["10 GB LRU Cache Management"]
-    end
-
-    subgraph AndroidRuntime["5. Android Native Runtime (Capacitor)"]
-        Cap["Capacitor Bridge Activity"]
-        ExoPlugin["ExoPlayerPlugin.java (Media3)"]
-        NativeView["Native PlayerView (Layer 0)"]
-        TransWeb["Transparent WebView (Layer 1)"]
-        Orientation["ScreenOrientation Plugin (Landscape/Portrait)"]
-    end
-
-    LivingUI --> Profiles
-    LivingUI --> Watchlist
-    LivingUI --> Progress
-    LivingUI --> UIState
-
-    LivingUI --> Registry
-    Registry --> Cinemeta
-    Registry --> Addons
-    Addons --> Proxy
-
-    Registry --> DesktopRuntime
-    DesktopRuntime --> PlayerUI
-
-    Registry --> AndroidRuntime
-    AndroidRuntime --> PlayerUI
-
-    classDef uiStyle fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
-    classDef stateStyle fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;
-    classDef protoStyle fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#f8fafc;
-    classDef deskStyle fill:#312e81,stroke:#a78bfa,stroke-width:2px,color:#f8fafc;
-    classDef andStyle fill:#431407,stroke:#fb923c,stroke-width:2px,color:#f8fafc;
-
-    class LivingUI,Nav,Modals,PlayerUI uiStyle;
-    class Profiles,Watchlist,Progress,UIState stateStyle;
-    class Registry,Cinemeta,Addons,Proxy protoStyle;
-    class Elec,EmbServer,P2P,FFmpeg,DiskCache deskStyle;
-    class Cap,ExoPlugin,NativeView,TransWeb,Orientation andStyle;
+```
++-------------------------------------------------------------------------+
+|                       Active Web Frontend (React 19)                    |
+|                                                                         |
+|  +--------------------+   +---------------------+   +----------------+  |
+|  |  Living Navigation |   |  Hero Carousel      |   | Catalog Rows   |  |
+|  |  (Capsule Navbar)  |   |  (Glass Backdrop)   |   | (Posters/Tags) |  |
+|  +--------------------+   +---------------------+   +----------------+  |
+|                                                                         |
+|  +-------------------------------------------------------------------+  |
+|  |                    Details Modal & Add-on Manager                 |  |
+|  |            (Cinemeta Metadata & Read-Only Showcase)               |  |
+|  +-------------------------------------------------------------------+  |
++------------------------------------+------------------------------------+
+                                     |
+                                     v
++-------------------------------------------------------------------------+
+|                  Content & Metadata Layer (Data Core)                   |
+|                                                                         |
+|  +--------------------------------+   +------------------------------+  |
+|  |        Provider Registry       |   |       Cinemeta API           |  |
+|  |   (providerRegistry.ts)        |<->|   (v3-cinemeta.strem.io)     |  |
+|  |  * Showcase Mode: Cinemeta     |   |   * Movies, Shows, Seasons   |  |
+|  +--------------------------------+   +------------------------------+  |
++------------------------------------+------------------------------------+
+                                     |
+                                     v
++-------------------------------------------------------------------------+
+|                 Sovereign Local State (Browser Storage)                 |
+|                                                                         |
+|  +--------------------------------+   +------------------------------+  |
+|  |       User Profiles Store      |   |       Watchlist Store        |  |
+|  |     (Avatars, Active User)     |   |     (Per-Profile My List)    |  |
+|  +--------------------------------+   +------------------------------+  |
++------------------------------------+------------------------------------+
+                                     :
+             [ Inactive / Archived Code for Contributors ]
+                                     :
++------------------------------------+------------------------------------+
+|                         _hold/ Archive Folder                           |
+|                                                                         |
+|  - _hold/player/   : Video.js, LoomBox loader & native bridge           |
+|  - _hold/server/   : Node.js BitTorrent streaming server & FFmpeg remux |
+|  - _hold/electron/ : Electron 45 desktop shell & window orchestration   |
+|  - _hold/android/  : Capacitor Android project with Media3 ExoPlayer    |
+|  - _hold/scripts/  : Standalone packaging and build scripts             |
++-------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. The Stremio Sovereign Freedom Model
+## 3. Legal & Ethical Disclaimer
 
-Following the Stremio architectural paradigm, Endless Stream strictly separates client software from content indexes:
-
-1. **Zero Pre-bundled Scrapers**: Out of the box, the client bundles zero scrapers, torrent aggregators, or private indexes.
-2. **Standard Stremio v3 Protocol**: The application speaks the open Stremio JSON protocol (`/manifest.json`, `/catalog/...`, `/meta/...`, `/stream/...`, `/subtitles/...`).
-3. **User-Controlled Extensions**: Users configure add-ons via the visual Addon Manager. All manifests are persisted locally in `localStorage` under `endless_stream:addon_urls`.
-4. **Zero-Addon Baseline**: Users retain full capability to purge all installed add-ons back to zero at any time.
-
-```mermaid
-flowchart LR
-    User["User"]
-    AddonModal["Addon Manager Modal"]
-    LocalStore["localStorage<br/>(endless_stream:addon_urls)"]
-    Registry["ProviderRegistry"]
-    Manifest["Community Manifest URL<br/>(manifest.json)"]
-    Streams["Stream Resolution Pipeline"]
-
-    User -->|Paste URL or Install| AddonModal
-    AddonModal -->|Validate Manifest| Manifest
-    Manifest -->|Save Valid URL| LocalStore
-    LocalStore -->|Hydrate| Registry
-    Registry -->|Query Streams| Streams
-
-    classDef defaultStyle fill:#18181b,stroke:#a1a1aa,stroke-width:1px,color:#f4f4f5;
-    classDef accentStyle fill:#1e1b4b,stroke:#6366f1,stroke-width:2px,color:#f8fafc;
-    classDef greenStyle fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#f8fafc;
-
-    class User,AddonModal defaultStyle;
-    class LocalStore,Registry accentStyle;
-    class Manifest,Streams greenStyle;
-```
+- **Zero Copyrighted Media**: Endless Stream does not host, store, index, or distribute any media files, video streams, or copyrighted material.
+- **Zero Built-In Scrapers or Torrents**: The active web shell includes zero scrapers, torrent swarm engines, or private indexers.
+- **Public Metadata Only**: Catalogs, synopses, episode guides, and poster artwork are sourced strictly from open, public metadata protocols (Cinemeta).
+- **Playback Disabled in Showcase**: Video playback navigation is disabled across all UI components, serving as an interactive demonstration of modern streaming UI design patterns.
 
 ---
 
-## 3. Desktop Streaming Engine (Electron & P2P)
+## 4. Key UI/UX Highlights
 
-On Windows Desktop, Endless Stream operates an embedded loopback server with an integrated BitTorrent client and on-the-fly media transmuxer.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as User
-    participant Player as React VideoPlayer
-    participant Server as Embedded HTTP Server (5173)
-    participant Engine as P2P Middleware (torrent-stream)
-    participant Disk as Temp Cache Disk
-    participant FFmpeg as FFmpeg Process
-    participant Video as HTML5 Video Element
-
-    User->>Player: Click Stream (infoHash, fileIdx)
-    Player->>Server: GET /stream/:infoHash/:fileIdx
-    Server->>Engine: getOrCreateEngine(infoHash)
-    Engine->>Engine: Connect Trackers & DHT Swarm
-    Engine->>Engine: Prioritize Head (8 pcs) & Tail (2 pcs)
-    Engine->>Disk: Write Incoming Chunks to Disk
-    
-    alt Stream is Native MP4 / WebM
-        Server->>Video: HTTP 206 Partial Content (Range Stream)
-    else Stream is Matroska (.mkv) / Other
-        Engine->>Engine: waitForHeadChunks(fileToStream)
-        Server->>FFmpeg: Spawn FFmpeg (-i fullFilePath -c:v copy -f mp4)
-        FFmpeg-->>Server: Stream Fragmented MP4 stdout
-        Server-->>Video: Pipe MP4 to HTML5 Video Element
-    end
-
-    Video->>Player: onLoadedMetadata / onCanPlay
-    Player->>Player: Dismiss Prebuffering Modal & Play
-```
-
-### Key Technical Properties:
-- **Disk-Buffered Remuxing**: Reading directly from disk (`-i fullFilePath` with `-probesize 1M -analyzeduration 1M -fflags +nobuffer+fastseek`) eliminates stream starvation associated with unseekable pipes.
-- **HTTP 206 Range Streaming**: For MP4 files, Range requests (`bytes=start-end`) enable instantaneous seeking without invoking FFmpeg.
-- **10 GB LRU Cache**: Background cleaner tracks file access timestamps and automatically purges inactive chunks when disk consumption exceeds 10 GB.
+- **Living Creature Navigation**: Floating capsule navbar with top-centered alignment on desktop and bottom ergonomics on mobile.
+- **Cinematic Apple TV+ Backdrop Glow**: Dynamic ambient backlighting adapting to poster tones.
+- **Detailed Episode & Title Inspector**: High-resolution metadata badges (HD, CC, TV-MA, IMDb ratings), full synopses, cast lists, and season pickers.
+- **Multi-Profile System**: Living avatar profiles with independent watchlists stored entirely in client `localStorage`.
+- **Modular Add-on Manager**: Stremio-inspired protocol manager demonstrating extensible content discovery.
 
 ---
 
-## 4. Android Native Architecture (Media3 ExoPlayer)
-
-On Android, Endless Stream compiles into a native APK using Capacitor, leveraging Google's **Media3 ExoPlayer** for hardware-accelerated video rendering.
-
-```mermaid
-flowchart TD
-    subgraph DeviceWindow["Android Device Window Frame"]
-        subgraph Layer0["Layer 0: Native Video Surface"]
-            PlayerView["androidx.media3.ui.PlayerView<br/>(Hardware Accelerated Video Surface)"]
-            ExoInstance["androidx.media3.exoplayer.ExoPlayer<br/>(H.264 / H.265 / VP9 / AV1 / AC3 / DTS)"]
-        end
-
-        subgraph Layer1["Layer 1: Transparent WebView"]
-            CapBridge["Capacitor Bridge"]
-            DOM["DOM Body (background: transparent)<br/>(Living React Controls Floating on Top)"]
-            ReactUI["Living Player Controls<br/>(Scrub Bar, 3-Dot Menu, Audio/Subtitle Selector)"]
-        end
-    end
-
-    ExoInstance --> PlayerView
-    CapBridge --> TransBridge["exoPlayerBridge.ts"]
-    TransBridge <--> ExoPlugin["ExoPlayerPlugin.java"]
-    ExoPlugin --> ExoInstance
-    ReactUI --> DOM
-
-    classDef l0Style fill:#022c22,stroke:#059669,stroke-width:2px,color:#ecfdf5;
-    classDef l1Style fill:#1e1b4b,stroke:#6366f1,stroke-width:2px,color:#e0e7ff;
-    classDef devStyle fill:#09090b,stroke:#27272a,stroke-width:2px,color:#fafafa;
-
-    class Layer0 l0Style;
-    class Layer1 l1Style;
-    class DeviceWindow devStyle;
-```
-
-### Android Enhancements in V1.0:
-1. **Cleartext Traffic Support**: `android:usesCleartextTraffic="true"` configured in `AndroidManifest.xml` to allow HTTP/P2P local streaming endpoints.
-2. **Transparent WebView Stacking**: Dynamic toggling of `document.body` and `document.documentElement` background colors to `transparent` during playback, allowing the native `PlayerView` beneath the WebView to remain visible.
-3. **Network DataSource Configuration**: `DefaultHttpDataSource.Factory` configured with `allowCrossProtocolRedirects(true)` and standardized mobile User-Agent.
-4. **Orientation Lock**: Dynamic toggling between portrait and landscape modes using `@capacitor/screen-orientation`.
-5. **Locked JDK 17 Toolchain**: `android/gradle.properties` locks the Gradle daemon JVM to Amazon Corretto JDK 17 to prevent Java 25 class file semantic analysis incompatibilities.
-
----
-
-## 5. Repository File Structure
-
-```
-ProjectX/
-├── android/                         # Native Android Capacitor Project
-│   ├── app/
-│   │   ├── build.gradle             # Android app build configuration (Media3 dependencies)
-│   │   └── src/main/
-│   │       ├── AndroidManifest.xml  # Cleartext HTTP & permissions
-│   │       └── java/com/endless/stream/
-│   │           ├── MainActivity.java     # BridgeActivity with 60+ FPS display refresh
-│   │           └── ExoPlayerPlugin.java  # Native Media3 ExoPlayer bridge
-│   ├── build_apk.bat                # Automated Android APK compilation script
-│   └── gradle.properties            # JDK 17 daemon lock
-├── electron/
-│   ├── main.cjs                     # Electron main process & embedded server
-│   └── preload.cjs                  # Secure context isolation bridge
-├── server/
-│   ├── p2pMiddleware.js             # BitTorrent swarm engine & FFmpeg transmuxer
-│   └── streamServer.js              # Standalone streaming server wrapper
-├── src/
-│   ├── app/                         # Application root, routing, UI stores
-│   ├── data/                        # Content providers, hooks, cache, Stremio addon registry
-│   ├── details/                     # Content details modal & episode picker
-│   ├── pages/                       # Home, Movies, TV Shows, Search, My List
-│   ├── player/                      # VideoPlayer, LoomBoxLoading, ExoPlayer bridge
-│   ├── profiles/                    # Multi-profile system, watchlist & progress stores
-│   └── ui/                          # Apple TV+ glassmorphism components (Navbar, Hero, Row, PosterCard)
-├── package_desktop.cjs              # Electron standalone packager script
-└── vite.config.ts                   # Vite configuration with Tailwind CSS v4
-```
-
----
-
-## 6. Build Instructions
+## 5. Quick Start
 
 ### Prerequisites
-- **Node.js**: v18.0.0 or higher
-- **JDK**: Amazon Corretto JDK 17 (Required for Android builds)
-- **Git**: Installed on PATH
+- [Node.js](https://nodejs.org/) v18.0.0 or higher
+- npm v9.0.0 or higher
 
-### Development Server
+### Installation & Development
 ```bash
+# Clone the repository
+git clone https://github.com/narayan-sigmamale/Endless-Stream.git
+cd Endless-Stream
+
+# Install frontend dependencies
 npm install
+
+# Start Vite local development server
 npm run dev
 ```
 
-### Building Windows Desktop Standalone (.exe)
-```bash
-node package_desktop.cjs
-```
-Output: `release-builds/Endless Stream-win32-x64/Endless Stream.exe`
+Visit `http://localhost:5173` in your browser.
 
-### Building Android APK (.apk)
+### Linting & Production Build
 ```bash
+# Run oxlint for code quality
+npm run lint
+
+# Compile TypeScript and create production bundle
 npm run build
-npx cap sync android
-cmd /c "build_apk.bat"
+
+# Preview production build locally
+npm run preview
 ```
-Output: `android/app/build/outputs/apk/debug/app-debug.apk`
 
 ---
 
-## 7. Known Technical Limitations & Future Work
+## 6. Project Structure
 
-1. **Torrent Swarm Cold Starts**: Swarms with low seed counts take time to gather initial pieces. A persistent distributed metadata cache or web-seed integration would accelerate startup times.
-2. **Real-time Remuxing on Unfinished Files**: Incomplete MKV containers require robust cue probing to prevent FFmpeg pipeline stalls when seeking into unbuffered piece boundaries.
-3. **Android Background Torrent Daemon**: Native Android playback functions best with direct HTTP/Debrid streams. Full standalone BitTorrent streaming on mobile would benefit from an embedded native C++ libtorrent daemon.
+```
+ProjectX/
+├── _hold/                           # Archived modules (Playback, Server, Electron, Android)
+│   ├── android/                     # Capacitor Media3 ExoPlayer Android project
+│   ├── electron/                    # Electron main & preload scripts
+│   ├── player/                      # Video player components & bridges
+│   ├── scripts/                     # Native build and packaging scripts
+│   └── server/                      # P2P stream server & middleware
+├── public/                          # Static web assets & icons
+├── src/
+│   ├── addons/                      # Add-on Manager modal & preset definitions
+│   ├── app/                         # App shell, router layout, and UI state store
+│   ├── data/                        # Cinemeta provider, query hooks, and cache
+│   ├── details/                     # Glassmorphic Details Modal & episode picker
+│   ├── pages/                       # Home, Movies, Shows, Search, My List
+│   ├── profiles/                    # Multi-profile system, avatars & watchlist
+│   ├── types/                       # TypeScript interfaces and data models
+│   └── ui/                          # Glassmorphic UI components (Navbar, Hero, Row)
+├── package.json                     # Frontend dependencies and scripts
+├── tsconfig.json                    # TypeScript compiler configuration (excludes _hold)
+└── vite.config.ts                   # Vite bundler configuration with Tailwind CSS v4
+```
 
 ---
 
-## 8. License
+## 7. License
 
-Distributed under the MIT License. Endless Stream does not host, provide, or scrape copyrighted media streams. All catalogs and streams are managed through third-party community add-ons under user sovereignty.
+Distributed under the [MIT License](LICENSE).

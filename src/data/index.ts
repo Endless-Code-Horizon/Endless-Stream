@@ -21,4 +21,5 @@ export {
   getAddonProviders,
   getSavedAddonUrls,
   DEFAULT_ADDON_URLS,
+  CINEMETA_URL,
 } from './providerRegistry';

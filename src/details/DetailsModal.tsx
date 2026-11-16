@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from 'react-router-dom'
 import { useUIStore } from '@/app/uiStore'
 import { useMeta, useCatalog } from '@/data'
 import { useProfileStore } from '@/profiles/profileStore'
@@ -247,21 +246,18 @@ export function DetailsModal() {
 
                   {/* Action Buttons Row */}
                   <div className="flex items-center gap-2.5 sm:gap-3">
-                    {/* Big Play Button */}
-                    <Link
-                      to={
-                        media.type === 'series'
-                          ? `/play/${media.type}/${media.id}?s=${selectedSeason}&e=1`
-                          : `/play/${media.type}/${media.id}`
-                      }
-                      onClick={closeModal}
-                      className="flex items-center gap-2 bg-white hover:bg-white/90 active:scale-95 text-black font-bold text-xs sm:text-base px-5 sm:px-7 py-2 sm:py-2.5 rounded-md transition-all shadow-2xl cursor-pointer"
+                    {/* Big Play Button (Disabled in UI Showcase) */}
+                    <button
+                      type="button"
+                      disabled
+                      title="Playback disabled in UI showcase"
+                      className="flex items-center gap-2 bg-white/70 text-black font-bold text-xs sm:text-base px-5 sm:px-7 py-2 sm:py-2.5 rounded-md opacity-60 cursor-not-allowed shadow-none"
                     >
                       <svg className="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 24 24">
                         <path d="M8 5v14l11-7z" />
                       </svg>
                       <span>Play</span>
-                    </Link>
+                    </button>
 
                     {/* Add to Watchlist Circle Button */}
                     <button
@@ -465,11 +461,10 @@ export function DetailsModal() {
                     {media.seasons
                       .find((s) => s.season === selectedSeason)
                       ?.episodes.map((ep) => (
-                        <Link
+                        <div
                           key={ep.episode}
-                          to={`/play/series/${media.id}?s=${selectedSeason}&e=${ep.episode}`}
-                          onClick={closeModal}
-                          className="flex items-start gap-3 sm:gap-6 py-4 sm:py-5 px-1.5 sm:px-4 rounded-2xl hover:bg-white/[0.06] transition-all cursor-pointer group"
+                          title="Playback disabled in UI showcase"
+                          className="flex items-start gap-3 sm:gap-6 py-4 sm:py-5 px-1.5 sm:px-4 rounded-2xl hover:bg-white/[0.04] transition-all cursor-not-allowed group opacity-85 hover:opacity-100"
                         >
                           {/* Episode Number */}
                           <span className="text-base sm:text-2xl font-extrabold text-white/40 group-hover:text-white w-5 sm:w-8 text-center shrink-0 transition-colors pt-1 sm:pt-1.5">
@@ -493,7 +488,10 @@ export function DetailsModal() {
                             />
                             {/* Play overlay icon */}
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white/95 text-black flex items-center justify-center shadow-xl">
+                              <div
+                                title="Playback disabled in UI showcase"
+                                className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white/80 text-black flex items-center justify-center shadow-xl opacity-60 cursor-not-allowed"
+                              >
                                 <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current translate-x-0.5" viewBox="0 0 24 24">
                                   <path d="M8 5v14l11-7z" />
                                 </svg>
@@ -517,7 +515,7 @@ export function DetailsModal() {
                               </p>
                             )}
                           </div>
-                        </Link>
+                        </div>
                       ))}
                   </div>
                 </div>

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Link } from 'react-router-dom'
 import { useUIStore } from '@/app/uiStore'
 import type { MediaItem } from '@/types'
 
@@ -145,9 +144,11 @@ export function Hero({ items, autoPlayInterval = 12000 }: HeroProps) {
 
         {/* Action Buttons: Play + More Info */}
         <div className="flex items-center gap-2.5 sm:gap-3.5 pt-1">
-          <Link
-            to={`/play/${currentItem.type}/${currentItem.id}`}
-            className="flex items-center gap-1.5 sm:gap-2 bg-white text-black hover:bg-neutral-200 active:scale-95 px-5 sm:px-8 py-2 sm:py-3 rounded-full font-bold text-xs sm:text-base transition-all duration-300 shadow-[0_4px_24px_rgba(255,255,255,0.25)] hover:shadow-[0_6px_32px_rgba(255,255,255,0.45)] hover:scale-105 cursor-pointer"
+          <button
+            type="button"
+            disabled
+            title="Playback disabled in UI showcase"
+            className="flex items-center gap-1.5 sm:gap-2 bg-white/70 text-black font-bold text-xs sm:text-base px-5 sm:px-8 py-2 sm:py-3 rounded-full opacity-60 cursor-not-allowed shadow-none"
           >
             <svg
               className="w-4 h-4 sm:w-5 sm:h-5 fill-current"
@@ -156,7 +157,7 @@ export function Hero({ items, autoPlayInterval = 12000 }: HeroProps) {
               <path d="M8 5v14l11-7z" />
             </svg>
             <span>Play</span>
-          </Link>
+          </button>
 
           <button
             type="button"
